@@ -68,6 +68,27 @@
     .glow-amber {
       box-shadow: 0 0 15px rgba(245, 158, 11, 0.25);
     }
+    #printableEventArchive {
+      overflow: visible;
+    }
+    #printableEventArchive table {
+      page-break-inside: auto;
+      break-inside: auto;
+    }
+    #printableEventArchive thead {
+      display: table-header-group;
+    }
+    #printableEventArchive tr,
+    #printableEventArchive .pdf-avoid-break {
+      page-break-inside: avoid;
+      break-inside: avoid;
+    }
+    #printableEventArchive td,
+    #printableEventArchive th {
+      overflow-wrap: break-word;
+      word-break: break-word;
+      vertical-align: top;
+    }
   </style>
 </head>
 <body class="bg-[#090d16] text-slate-100 min-h-screen flex flex-col antialiased selection:bg-sky-500 selection:text-white">
@@ -454,7 +475,12 @@
 
             <form id="quickLogForm" onsubmit="handleLogSubmit(event)" class="space-y-4 text-xs">
               <div>
-                <label class="block text-slate-300 font-medium mb-1">事件分类与来源 (4项清晰业务)</label>
+                <div class="flex items-center justify-between mb-1">
+                  <label class="block text-slate-300 font-medium">事件分类与来源 (4项清晰业务)</label>
+                  <button type="button" id="btnManageLogTargets" onclick="openLogTargetManager()" class="text-[10px] px-1.5 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-sky-300 border border-slate-700 transition-colors" title="维护事件来源字典">
+                    ⚙️ 管理来源
+                  </button>
+                </div>
                 <div class="grid grid-cols-2 gap-2">
                   <select id="logCategory" class="w-full bg-slate-900 border border-slate-700/80 rounded-lg p-2 text-slate-200 focus:outline-none focus:border-sky-500 disabled:opacity-50 disabled:cursor-not-allowed">
                     <option value="运行报警">运行报警 (Alarm)</option>
@@ -463,12 +489,7 @@
                     <option value="谱仪协助">谱仪协助 (Assistance)</option>
                   </select>
                   <select id="logTarget" class="w-full bg-slate-900 border border-slate-700/80 rounded-lg p-2 text-slate-200 focus:outline-none focus:border-sky-500 disabled:opacity-50 disabled:cursor-not-allowed">
-                    <option value="靶站综合大厅">靶站综合大厅</option>
-                    <option value="SANS (小角散射)">SANS (小角散射)</option>
-                    <option value="MPI (多物理谱仪)">MPI (多物理谱仪)</option>
-                    <option value="Atmospheric (大气中子)">Atmospheric (大气中子)</option>
-                    <option value="靶站水冷回路">靶站水冷回路</option>
-                    <option value="低温样品环境CCR">低温样品环境 CCR</option>
+                    <option value="">正在加载来源...</option>
                   </select>
                 </div>
               </div>
@@ -536,6 +557,10 @@
           </div>
 
           <div class="flex items-center gap-2 self-end sm:self-auto">
+            <button id="btnBatchEventExport" onclick="openEventBatchExportModal()" class="bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold py-2 px-3.5 rounded-lg flex items-center gap-1.5 border border-slate-700 transition-all disabled:opacity-45 disabled:cursor-not-allowed" title="仅系统管理员可用">
+              <i class="ph ph-chart-bar text-sm text-emerald-400"></i>
+              <span>批量汇总导出闭环事件 (PDF)</span>
+            </button>
             <button id="btnNewEventTrigger" onclick="triggerNewEventAction()" class="bg-sky-600 hover:bg-sky-500 text-white text-xs font-semibold py-2 px-3.5 rounded-lg flex items-center gap-1.5 shadow-md shadow-sky-600/30 transition-all disabled:opacity-50 disabled:cursor-not-allowed">
               <i class="ph ph-plus text-sm"></i>
               <span>发起新事件追踪</span>
@@ -865,7 +890,7 @@
           <div class="flex items-center justify-between pb-2 border-b border-slate-800">
             <div>
               <span class="font-bold text-white text-xs">系统注册人员清单与授权状态</span>
-              <p class="text-[11px] text-slate-400">管理员可对值班资质合格人员一键授予【在岗值班员】实操权限</p>
+              <p class="text-[11px] text-slate-400">管理员可审批提权、修改账号资料（姓名/部门/账号）以及删除账号</p>
             </div>
             <button onclick="renderUserAuditList()" class="px-2 py-1 rounded bg-slate-800 text-slate-300 hover:text-white text-xs">
               <i class="ph ph-arrows-clockwise"></i> 刷新列表
@@ -879,8 +904,8 @@
                   <th class="py-2 px-2.5">账号/工号</th>
                   <th class="py-2 px-2.5">姓名</th>
                   <th class="py-2 px-2.5">所属部门</th>
-                  <th class="py-2 px-2.5">当前角色</th>
-                  <th class="py-2 px-2.5 text-right">权限变更操作</th>
+                  <th class="py-2 px-2.5">角色 / 状态</th>
+                  <th class="py-2 px-2.5 text-right">账号管理</th>
                 </tr>
               </thead>
               <tbody id="userAuditTableBody" class="divide-y divide-slate-800 font-normal">
@@ -1447,6 +1472,160 @@
   </div>
 
   <!-- TOAST NOTIFICATION CONTAINER -->
+  <div id="modalEventBatchExport" class="fixed inset-0 bg-black/80 backdrop-blur-sm z-[60] hidden flex items-center justify-center p-4">
+    <div class="bg-[#0f172a] border border-emerald-500/40 rounded-xl w-full max-w-lg shadow-2xl overflow-hidden">
+      <div class="p-4 bg-slate-900 border-b border-slate-800 flex items-center justify-between">
+        <div class="flex items-center gap-2">
+          <i class="ph ph-chart-bar text-emerald-400 text-lg"></i>
+          <div>
+            <h3 class="font-bold text-sm text-white">闭环事件归档时间段筛选</h3>
+            <p class="text-[10px] text-slate-400">仅系统管理员可批量汇总导出闭环工单</p>
+          </div>
+        </div>
+        <button onclick="closeEventBatchExportModal()" class="text-slate-400 hover:text-white"><i class="ph ph-x text-lg"></i></button>
+      </div>
+      <div class="p-5 space-y-4 text-xs">
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block text-slate-400 mb-1">开始时间</label>
+            <input type="datetime-local" id="batchStartAt" class="w-full bg-slate-950 border border-slate-700 rounded-lg p-2 text-sky-300 font-mono focus:outline-none focus:border-emerald-500">
+          </div>
+          <div>
+            <label class="block text-slate-400 mb-1">结束时间</label>
+            <input type="datetime-local" id="batchEndAt" class="w-full bg-slate-950 border border-slate-700 rounded-lg p-2 text-sky-300 font-mono focus:outline-none focus:border-emerald-500">
+          </div>
+        </div>
+        <div>
+          <label class="block text-slate-400 mb-1.5">快捷时间范围</label>
+          <div class="flex flex-wrap gap-2">
+            <button type="button" onclick="setBatchRange('week')" class="px-2.5 py-1.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700">本周运行</button>
+            <button type="button" onclick="setBatchRange('month')" class="px-2.5 py-1.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700">本月至今</button>
+            <button type="button" onclick="setBatchRange('30days')" class="px-2.5 py-1.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700">最近30天</button>
+          </div>
+        </div>
+        <div class="p-2.5 rounded-lg bg-emerald-950/20 border border-emerald-800/40 text-[10px] text-emerald-200/90 leading-relaxed">
+          按事件闭环时间筛选工单，汇总台账按闭环时间倒序排版，含严重级别统计与管理员签章位。
+        </div>
+      </div>
+      <div class="p-3 bg-slate-900 border-t border-slate-800 flex justify-end gap-2">
+        <button onclick="closeEventBatchExportModal()" class="px-4 py-1.5 rounded-lg bg-slate-800 text-slate-300 text-xs">取消</button>
+        <button id="btnConfirmBatchExport" onclick="exportClosedEventsBatchPdf()" class="px-4 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold shadow-md shadow-emerald-600/30">确认导出</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="eventPdfPrintWrapper" style="display:none; position:fixed; left:-10000px; top:0; width:794px; background:#fff;">
+    <div id="printableEventArchive" style="width:794px; min-height:1123px; margin:0 auto; padding:42px 46px; box-sizing:border-box; background:#fff; color:#111; font-family:'SimSun','Songti SC','STSong',serif; line-height:1.55;"></div>
+  </div>
+
+  <div id="modalLogTargets" class="fixed inset-0 bg-black/75 backdrop-blur-sm z-[60] hidden flex items-center justify-center p-4">
+    <div class="bg-[#0f172a] border border-sky-500/40 rounded-xl w-full max-w-lg shadow-2xl overflow-hidden">
+      <div class="p-4 bg-slate-900 border-b border-slate-800 flex items-center justify-between">
+        <div class="flex items-center gap-2">
+          <i class="ph ph-gear-six text-sky-400 text-lg"></i>
+          <div>
+            <h3 class="font-bold text-sm text-white">事件来源字典维护</h3>
+            <p class="text-[10px] text-slate-400">管理“登记新记事 / 报警”中的事件来源下拉选项</p>
+          </div>
+        </div>
+        <button onclick="closeLogTargetManager()" class="text-slate-400 hover:text-white"><i class="ph ph-x text-lg"></i></button>
+      </div>
+      <div class="p-5 space-y-4 text-xs">
+        <div class="flex flex-wrap gap-2 min-h-[44px]" id="logTargetManagerList">
+          <span class="text-slate-500">正在加载来源...</span>
+        </div>
+        <div class="p-2.5 rounded-lg bg-slate-900 border border-slate-800 text-[10px] text-slate-400 leading-relaxed">
+          管理员可删除任意来源，但必须至少保留一个可用来源；名称按不区分大小写去重。变更后登记表单下拉菜单会立即刷新。
+        </div>
+        <form onsubmit="addLogTarget(event)" class="flex items-center gap-2">
+          <input id="newLogTargetName" required maxlength="160" placeholder="输入新的来源名称，如 MPI (多物理谱仪)" class="flex-1 bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-slate-200 focus:outline-none focus:border-sky-500">
+          <button type="submit" id="btnAddLogTarget" class="bg-sky-600 hover:bg-sky-500 text-white px-3.5 py-2 rounded-lg font-semibold shrink-0">➕ 新增来源</button>
+        </form>
+      </div>
+      <div class="p-3 bg-slate-900 border-t border-slate-800 text-right">
+        <button onclick="closeLogTargetManager()" class="px-4 py-1.5 rounded-lg bg-slate-800 text-slate-300 text-xs">关闭</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="modalUserEditor" class="fixed inset-0 bg-black/80 backdrop-blur-sm z-[60] hidden flex items-center justify-center p-4">
+    <div class="bg-[#0f172a] border border-sky-500/40 rounded-xl w-full max-w-lg shadow-2xl overflow-hidden">
+      <div class="p-4 bg-slate-900 border-b border-slate-800 flex items-center justify-between">
+        <div class="flex items-center gap-2">
+          <i class="ph ph-user-gear text-sky-400 text-lg"></i>
+          <h3 class="font-bold text-sm text-white">编辑账号资料与权限</h3>
+        </div>
+        <button onclick="closeUserEditor()" class="text-slate-400 hover:text-white"><i class="ph ph-x text-lg"></i></button>
+      </div>
+      <form onsubmit="saveUserEdit(event)" class="p-5 space-y-3 text-xs">
+        <input type="hidden" id="editUserId">
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block text-slate-400 mb-1">登录账号</label>
+            <input type="text" id="editUsername" required class="w-full bg-slate-950 border border-slate-700 rounded-lg p-2 text-slate-200 font-mono focus:outline-none focus:border-sky-500">
+          </div>
+          <div>
+            <label class="block text-slate-400 mb-1">真实姓名</label>
+            <input type="text" id="editRealName" required class="w-full bg-slate-950 border border-slate-700 rounded-lg p-2 text-slate-200 focus:outline-none focus:border-sky-500">
+          </div>
+        </div>
+        <div>
+          <label class="block text-slate-400 mb-1">所属部门 / 课题组</label>
+          <input type="text" id="editDept" class="w-full bg-slate-950 border border-slate-700 rounded-lg p-2 text-slate-200 focus:outline-none focus:border-sky-500">
+        </div>
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block text-slate-400 mb-1">角色权限</label>
+            <select id="editRole" class="w-full bg-slate-950 border border-slate-700 rounded-lg p-2 text-slate-200 focus:outline-none focus:border-sky-500">
+              <option value="viewer">只读观察员</option>
+              <option value="operator">在岗值班员</option>
+              <option value="admin">系统管理员</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-slate-400 mb-1">账号状态</label>
+            <select id="editStatus" class="w-full bg-slate-950 border border-slate-700 rounded-lg p-2 text-slate-200 focus:outline-none focus:border-sky-500">
+              <option value="active">正常启用</option>
+              <option value="pending">待审核</option>
+              <option value="disabled">停用</option>
+            </select>
+          </div>
+        </div>
+        <div>
+          <label class="block text-slate-400 mb-1">重置密码 <span class="text-slate-500">(留空则不修改)</span></label>
+          <input type="password" id="editPassword" minlength="6" autocomplete="new-password" placeholder="至少 6 位" class="w-full bg-slate-950 border border-slate-700 rounded-lg p-2 text-slate-200 font-mono focus:outline-none focus:border-sky-500">
+        </div>
+        <div id="editSelfHint" class="hidden p-2.5 rounded-lg bg-amber-950/30 border border-amber-700/40 text-[11px] text-amber-200 leading-relaxed">
+          正在编辑当前登录账号：可以修改姓名、部门、账号和密码，但不能降低自己的角色或停用自己，避免系统失去管理入口。
+        </div>
+        <div class="pt-2 flex justify-end gap-2">
+          <button type="button" onclick="closeUserEditor()" class="px-4 py-2 rounded-lg bg-slate-800 text-slate-300">取消</button>
+          <button type="submit" id="btnSaveUserEdit" class="px-4 py-2 rounded-lg bg-sky-600 hover:bg-sky-500 text-white font-medium shadow-md shadow-sky-600/30">保存修改</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <div id="modalDeleteUser" class="fixed inset-0 bg-black/80 backdrop-blur-sm z-[60] hidden flex items-center justify-center p-4">
+    <div class="bg-[#0f172a] border border-rose-500/50 rounded-xl w-full max-w-md shadow-2xl overflow-hidden">
+      <div class="p-4 bg-slate-900 border-b border-slate-800 flex items-center justify-between">
+        <div class="flex items-center gap-2 text-rose-400 font-bold text-sm">
+          <i class="ph ph-user-minus text-lg"></i>
+          <span>删除账号</span>
+        </div>
+        <button onclick="closeDeleteUserModal()" class="text-slate-400 hover:text-white"><i class="ph ph-x text-lg"></i></button>
+      </div>
+      <div class="p-5 space-y-3 text-xs">
+        <p class="text-slate-300 leading-relaxed">确定删除账号 <strong id="deleteUserName" class="text-white"></strong> (<span id="deleteUserAccount" class="font-mono text-sky-400"></span>) 吗？</p>
+        <p class="text-rose-200/80 bg-rose-950/30 border border-rose-800/40 rounded-lg p-2.5 leading-relaxed">删除后该账号将无法登录，历史操作记录中的姓名仍会保留。此操作不可撤销。</p>
+      </div>
+      <div class="p-3 bg-slate-900 border-t border-slate-800 flex justify-end gap-2">
+        <button onclick="closeDeleteUserModal()" class="px-4 py-1.5 rounded-lg bg-slate-800 text-slate-300 text-xs">取消</button>
+        <button onclick="confirmDeleteUser()" id="btnConfirmDeleteUser" class="px-4 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-500 text-white text-xs font-semibold shadow-md shadow-rose-600/30">确认删除</button>
+      </div>
+    </div>
+  </div>
+
   <div id="toast" class="fixed bottom-6 right-6 z-50 hidden bg-slate-900 border border-slate-700 text-white text-xs px-4 py-3 rounded-xl shadow-2xl flex items-center gap-2 transform transition-all duration-300">
     <i id="toastIcon" class="ph ph-check-circle text-emerald-400 text-lg"></i>
     <span id="toastMsg">操作已成功执行</span>
@@ -1469,6 +1648,7 @@
     let currentShift = null;
     let currentForecast = null;
     let apiReady = false;
+    let logTargets = [];
 
     function applyRolePermissions(role) {
       currentUser.role = role;
@@ -1544,6 +1724,11 @@
 
       if (logCat) logCat.disabled = isViewer;
       if (logTarget) logTarget.disabled = isViewer;
+      const targetManagerBtn = document.getElementById('btnManageLogTargets');
+      if (targetManagerBtn) {
+        targetManagerBtn.classList.toggle('hidden', isViewer);
+        targetManagerBtn.disabled = isViewer;
+      }
       if (logContent) logContent.disabled = isViewer;
       if (logStatus) logStatus.disabled = isViewer;
       if (logAuthor) logAuthor.disabled = isViewer;
@@ -1572,6 +1757,15 @@
       // 6. 模块 3：新增导航卡片按钮
       const btnAddNav = document.getElementById('btnAddNavTrigger');
       if (btnAddNav) btnAddNav.disabled = isViewer;
+
+      const btnBatchExport = document.getElementById('btnBatchEventExport');
+      if (btnBatchExport) {
+        const canBatchExport = (role === 'admin');
+        btnBatchExport.disabled = !canBatchExport;
+        btnBatchExport.classList.toggle('opacity-45', !canBatchExport);
+        btnBatchExport.classList.toggle('cursor-not-allowed', !canBatchExport);
+        btnBatchExport.title = canBatchExport ? '按时间范围批量汇总闭环事件' : '仅系统管理员可用';
+      }
 
       // 7. 重新渲染受权限影响的动态列表（巡查卡槽打卡按钮、待办操作、看板推进按钮、导航删除图标、SOP复选框）
       renderPatrolSlots();
@@ -2942,9 +3136,16 @@
                   <span class="text-slate-500 text-[10px] font-mono">流转中</span>
                 `}
               ` : `
-                <span class="text-emerald-400 text-[11px] flex items-center gap-1">
-                  <i class="ph ph-check-circle"></i> 已闭环归档
-                </span>
+                <div class="flex items-center gap-1.5">
+                  <span class="text-emerald-400 text-[11px] flex items-center gap-1">
+                    <i class="ph ph-check-circle"></i> 已闭环归档
+                  </span>
+                  ${!isViewer ? `
+                    <button onclick="exportClosedEventPdf('${ev.id}')" class="px-2 py-1 rounded bg-emerald-600/20 hover:bg-emerald-600/40 text-emerald-300 text-[10px] font-medium border border-emerald-500/30 flex items-center gap-1 transition-colors">
+                      <i class="ph ph-file-pdf"></i> 导出单据
+                    </button>
+                  ` : ''}
+                </div>
               `}
             </div>
           </div>
@@ -3642,6 +3843,7 @@
         ]);
         applySessionUser(me);
         hydrateFromBootstrap(data);
+        await loadLogTargets();
         if (data.forecast) {
           beamForecast = {
             type: data.forecast.type,
@@ -3675,6 +3877,91 @@
       renderNavCards();
       renderBeamForecastUI();
       applyRolePermissions(currentUser.role);
+    }
+
+    async function loadLogTargets() {
+      const select = document.getElementById('logTarget');
+      const previous = select ? select.value : '';
+      try {
+        logTargets = await apiRequest('/log-targets');
+        if (!select) return;
+        if (!logTargets.length) {
+          select.innerHTML = '<option value="">暂无来源，请先维护来源字典</option>';
+          return;
+        }
+        select.innerHTML = logTargets.map(item => `<option value="${item.name}">${item.name}</option>`).join('');
+        if (previous && logTargets.some(item => item.name === previous)) select.value = previous;
+        renderLogTargetManager();
+      } catch (error) {
+        if (select) select.innerHTML = '<option value="">来源加载失败</option>';
+        showToast(`⚠️ 来源加载失败：${error.message}`);
+      }
+    }
+
+    function renderLogTargetManager() {
+      const list = document.getElementById('logTargetManagerList');
+      if (!list) return;
+      if (!logTargets.length) {
+        list.innerHTML = '<span class="text-slate-500">当前没有可用来源</span>';
+        return;
+      }
+      const canDelete = currentUser.role === 'admin';
+      list.innerHTML = logTargets.map(item => `
+        <span class="inline-flex items-center gap-1 px-2 py-1 rounded-lg border ${item.is_system ? 'bg-slate-800 border-slate-700 text-slate-300' : 'bg-sky-950/30 border-sky-800/50 text-sky-200'}">
+          ${item.name}
+          ${item.is_system
+            ? '<span class="text-[9px] text-slate-500 font-mono">SYSTEM</span>'
+            : ''}
+          ${canDelete
+            ? `<button type="button" onclick="deleteLogTarget(${item.id})" class="ml-0.5 text-rose-400 hover:text-rose-300" title="删除来源">✕</button>`
+            : ''}
+        </span>`).join('');
+    }
+
+    function openLogTargetManager() {
+      if (currentUser.role === 'viewer') return showToast('⚠️ 权限拦截：只读观察员不可维护来源字典！');
+      document.getElementById('newLogTargetName').value = '';
+      renderLogTargetManager();
+      document.getElementById('modalLogTargets').classList.remove('hidden');
+      loadLogTargets();
+    }
+
+    function closeLogTargetManager() {
+      document.getElementById('modalLogTargets').classList.add('hidden');
+    }
+
+    async function addLogTarget(event) {
+      event.preventDefault();
+      if (currentUser.role === 'viewer') return showToast('⚠️ 权限拦截：只读观察员不可新增来源！');
+      const input = document.getElementById('newLogTargetName');
+      const name = input.value.trim();
+      if (!name) return showToast('请输入来源名称');
+      const button = document.getElementById('btnAddLogTarget');
+      button.disabled = true;
+      try {
+        await apiRequest('/log-targets', { method: 'POST', body: { name } });
+        input.value = '';
+        await loadLogTargets();
+        showToast(`来源 [${name}] 已新增，下拉菜单已更新`);
+      } catch (error) {
+        showToast(`⚠️ ${error.message}`);
+      } finally {
+        button.disabled = false;
+      }
+    }
+
+    async function deleteLogTarget(targetId) {
+      if (currentUser.role !== 'admin') return showToast('⚠️ 权限拦截：只有系统管理员可以删除来源！');
+      const target = logTargets.find(item => item.id === targetId);
+      const name = target ? target.name : '该来源';
+      if (!window.confirm(`确定删除来源“${name}”吗？已有流水记录不会被修改。`)) return;
+      try {
+        await apiRequest(`/log-targets/${targetId}`, { method: 'DELETE' });
+        await loadLogTargets();
+        showToast(`来源 [${name}] 已删除`);
+      } catch (error) {
+        showToast(`⚠️ ${error.message}`);
+      }
     }
 
     function requireApiWrite() {
@@ -4004,15 +4291,24 @@
             : user.role === 'operator'
               ? '<span class="px-1.5 py-0.5 rounded text-[10px] font-bold bg-sky-500/20 text-sky-300 border border-sky-500/40">在岗值班员</span>'
               : '<span class="px-1.5 py-0.5 rounded text-[10px] font-bold bg-slate-800 text-slate-300 border border-slate-700">只读观察员</span>';
+          const statusTag = user.status === 'active'
+            ? '<span class="px-1.5 py-0.5 rounded text-[10px] bg-emerald-500/10 text-emerald-300 border border-emerald-500/30">正常</span>'
+            : user.status === 'pending'
+              ? '<span class="px-1.5 py-0.5 rounded text-[10px] bg-amber-500/10 text-amber-300 border border-amber-500/30">待审核</span>'
+              : '<span class="px-1.5 py-0.5 rounded text-[10px] bg-slate-800 text-slate-400 border border-slate-700">已停用</span>';
           return `<tr class="hover:bg-slate-900 transition-colors">
             <td class="py-2.5 px-2.5 font-mono text-slate-400">${user.username}</td>
             <td class="py-2.5 px-2.5 font-bold text-white">${user.name}</td>
             <td class="py-2.5 px-2.5 text-slate-400">${user.dept || '-'}</td>
-            <td class="py-2.5 px-2.5">${roleTag}</td>
-            <td class="py-2.5 px-2.5 text-right">
-              ${user.role === 'operator'
-                ? `<button onclick="changeUserRole(${user.id}, 'viewer')" class="px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-400 text-[10px]">降为只读</button>`
-                : `<button onclick="changeUserRole(${user.id}, 'operator')" class="px-2 py-1 rounded bg-sky-600/20 hover:bg-sky-600/40 text-sky-300 border border-sky-500/30 text-[10px]">审批并提权</button>`}
+            <td class="py-2.5 px-2.5 space-x-1">${roleTag}${statusTag}</td>
+            <td class="py-2.5 px-2.5 text-right whitespace-nowrap">
+              ${user.role === 'viewer' || user.status === 'pending'
+                ? `<button onclick="changeUserRole(${user.id}, 'operator')" class="px-2 py-1 rounded bg-sky-600/20 hover:bg-sky-600/40 text-sky-300 border border-sky-500/30 text-[10px]">审批提权</button>`
+                : ''}
+              <button onclick="openUserEditor(${user.id})" class="px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 text-[10px]">编辑资料</button>
+              ${user.id === currentUser.id
+                ? '<span class="text-[10px] text-slate-600">当前账号</span>'
+                : `<button onclick="openDeleteUserModal(${user.id})" class="px-2 py-1 rounded bg-rose-600/15 hover:bg-rose-600/30 text-rose-300 border border-rose-500/30 text-[10px]">删除</button>`}
             </td>
           </tr>`;
         }).join('');
@@ -4024,13 +4320,110 @@
     changeUserRole = async function (userId, targetRole) {
       if (currentUser.role !== 'admin') return showToast('⚠️ 权限拦截：只有系统管理员有权变更人员权限！');
       try {
-        await apiRequest(`/users/${userId}`, { method: 'PATCH', body: { role: targetRole, status: 'active' } });
+        const updated = await apiRequest(`/users/${userId}`, { method: 'PATCH', body: { role: targetRole, status: 'active' } });
+        if (updated.id === currentUser.id) {
+          const me = await apiRequest('/auth/me');
+          applySessionUser(me);
+        }
         await renderUserAuditList();
         showToast(`人员权限已调整为【${targetRole === 'operator' ? '在岗值班员' : '只读观察员'}】`);
       } catch (error) {
         showToast(`⚠️ ${error.message}`);
       }
     };
+
+    let pendingDeleteUserId = null;
+
+    function openUserEditor(userId) {
+      const user = userAccounts.find(item => item.id === userId);
+      if (!user) return;
+      document.getElementById('editUserId').value = user.id;
+      document.getElementById('editUsername').value = user.username;
+      document.getElementById('editRealName').value = user.name;
+      document.getElementById('editDept').value = user.dept || '';
+      document.getElementById('editRole').value = user.role;
+      document.getElementById('editStatus').value = user.status;
+      document.getElementById('editPassword').value = '';
+      const isSelf = user.id === currentUser.id;
+      document.getElementById('editSelfHint').classList.toggle('hidden', !isSelf);
+      document.getElementById('editRole').disabled = isSelf;
+      document.getElementById('editStatus').disabled = isSelf;
+      document.getElementById('modalUserEditor').classList.remove('hidden');
+    }
+
+    function closeUserEditor() {
+      document.getElementById('modalUserEditor').classList.add('hidden');
+      document.getElementById('editPassword').value = '';
+    }
+
+    async function saveUserEdit(event) {
+      event.preventDefault();
+      if (currentUser.role !== 'admin') return showToast('⚠️ 权限拦截：只有系统管理员有权修改账号资料！');
+      const userId = Number(document.getElementById('editUserId').value);
+      const body = {
+        username: document.getElementById('editUsername').value.trim(),
+        real_name: document.getElementById('editRealName').value.trim(),
+        dept: document.getElementById('editDept').value.trim()
+      };
+      const roleElement = document.getElementById('editRole');
+      const statusElement = document.getElementById('editStatus');
+      if (!roleElement.disabled) body.role = roleElement.value;
+      if (!statusElement.disabled) body.status = statusElement.value;
+      const password = document.getElementById('editPassword').value;
+      if (password) body.password = password;
+      const button = document.getElementById('btnSaveUserEdit');
+      button.disabled = true;
+      button.innerText = '保存中...';
+      try {
+        const updated = await apiRequest(`/users/${userId}`, { method: 'PATCH', body });
+        closeUserEditor();
+        if (updated.id === currentUser.id) {
+          const me = await apiRequest('/auth/me');
+          applySessionUser(me);
+        }
+        await renderUserAuditList();
+        showToast(`账号 [${updated.username}] 资料已更新`);
+      } catch (error) {
+        showToast(`⚠️ ${error.message}`);
+      } finally {
+        button.disabled = false;
+        button.innerText = '保存修改';
+      }
+    }
+
+    function openDeleteUserModal(userId) {
+      if (currentUser.role !== 'admin') return showToast('⚠️ 权限拦截：只有系统管理员有权删除账号！');
+      const user = userAccounts.find(item => item.id === userId);
+      if (!user) return;
+      if (user.id === currentUser.id) return showToast('⚠️ 不能删除当前登录的管理员账号');
+      pendingDeleteUserId = userId;
+      document.getElementById('deleteUserName').innerText = user.name;
+      document.getElementById('deleteUserAccount').innerText = user.username;
+      document.getElementById('modalDeleteUser').classList.remove('hidden');
+    }
+
+    function closeDeleteUserModal() {
+      pendingDeleteUserId = null;
+      document.getElementById('modalDeleteUser').classList.add('hidden');
+    }
+
+    async function confirmDeleteUser() {
+      if (!pendingDeleteUserId) return;
+      const button = document.getElementById('btnConfirmDeleteUser');
+      button.disabled = true;
+      button.innerText = '删除中...';
+      try {
+        await apiRequest(`/users/${pendingDeleteUserId}`, { method: 'DELETE' });
+        closeDeleteUserModal();
+        await renderUserAuditList();
+        showToast('账号已删除');
+      } catch (error) {
+        showToast(`⚠️ ${error.message}`);
+      } finally {
+        button.disabled = false;
+        button.innerText = '确认删除';
+      }
+    }
 
     async function loadHandoverPreview() {
       if (!currentShift) return null;
@@ -4076,6 +4469,272 @@
       if (currentUser.role === 'viewer') return showToast('⚠️ 权限拦截：只读观察员无权签署交接班！请以值班长身份操作。');
       openHandoverModal();
     };
+
+    function closeEventBatchExportModal() {
+      document.getElementById('modalEventBatchExport').classList.add('hidden');
+    }
+
+    function escapePdfText(value) {
+      return String(value == null ? '' : value)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+    }
+
+    function formatEventDateTime(value) {
+      if (!value) return '--';
+      return String(value).replace('T', ' ').substring(0, 19);
+    }
+
+    function sha256Fallback(text) {
+      const bytes = new TextEncoder().encode(String(text));
+      const bitLength = bytes.length * 8;
+      const totalLength = Math.ceil((bytes.length + 9) / 64) * 64;
+      const buffer = new Uint8Array(totalLength);
+      buffer.set(bytes);
+      buffer[bytes.length] = 0x80;
+      const view = new DataView(buffer.buffer);
+      view.setUint32(totalLength - 8, Math.floor(bitLength / 0x100000000), false);
+      view.setUint32(totalLength - 4, bitLength >>> 0, false);
+
+      const constants = new Uint32Array([
+        0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1, 0x923f82a4, 0xab1c5ed5,
+        0xd807aa98, 0x12835b01, 0x243185be, 0x550c7dc3, 0x72be5d74, 0x80deb1fe, 0x9bdc06a7, 0xc19bf174,
+        0xe49b69c1, 0xefbe4786, 0x0fc19dc6, 0x240ca1cc, 0x2de92c6f, 0x4a7484aa, 0x5cb0a9dc, 0x76f988da,
+        0x983e5152, 0xa831c66d, 0xb00327c8, 0xbf597fc7, 0xc6e00bf3, 0xd5a79147, 0x06ca6351, 0x14292967,
+        0x27b70a85, 0x2e1b2138, 0x4d2c6dfc, 0x53380d13, 0x650a7354, 0x766a0abb, 0x81c2c92e, 0x92722c85,
+        0xa2bfe8a1, 0xa81a664b, 0xc24b8b70, 0xc76c51a3, 0xd192e819, 0xd6990624, 0xf40e3585, 0x106aa070,
+        0x19a4c116, 0x1e376c08, 0x2748774c, 0x34b0bcb5, 0x391c0cb3, 0x4ed8aa4a, 0x5b9cca4f, 0x682e6ff3,
+        0x748f82ee, 0x78a5636f, 0x84c87814, 0x8cc70208, 0x90befffa, 0xa4506ceb, 0xbef9a3f7, 0xc67178f2
+      ]);
+      const state = new Uint32Array([
+        0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a,
+        0x510e527f, 0x9b05688c, 0x1f83d9ab, 0x5be0cd19
+      ]);
+      const schedule = new Uint32Array(64);
+      const rotr = (value, shift) => (value >>> shift) | (value << (32 - shift));
+
+      for (let offset = 0; offset < totalLength; offset += 64) {
+        for (let index = 0; index < 16; index++) {
+          schedule[index] = view.getUint32(offset + index * 4, false);
+        }
+        for (let index = 16; index < 64; index++) {
+          const sigma0 = rotr(schedule[index - 15], 7) ^ rotr(schedule[index - 15], 18) ^ (schedule[index - 15] >>> 3);
+          const sigma1 = rotr(schedule[index - 2], 17) ^ rotr(schedule[index - 2], 19) ^ (schedule[index - 2] >>> 10);
+          schedule[index] = (schedule[index - 16] + sigma0 + schedule[index - 7] + sigma1) >>> 0;
+        }
+
+        let a = state[0], b = state[1], c = state[2], d = state[3];
+        let e = state[4], f = state[5], g = state[6], h = state[7];
+        for (let index = 0; index < 64; index++) {
+          const sigma1 = rotr(e, 6) ^ rotr(e, 11) ^ rotr(e, 25);
+          const choice = (e & f) ^ (~e & g);
+          const temp1 = (h + sigma1 + choice + constants[index] + schedule[index]) >>> 0;
+          const sigma0 = rotr(a, 2) ^ rotr(a, 13) ^ rotr(a, 22);
+          const majority = (a & b) ^ (a & c) ^ (b & c);
+          const temp2 = (sigma0 + majority) >>> 0;
+          h = g;
+          g = f;
+          f = e;
+          e = (d + temp1) >>> 0;
+          d = c;
+          c = b;
+          b = a;
+          a = (temp1 + temp2) >>> 0;
+        }
+        state[0] = (state[0] + a) >>> 0;
+        state[1] = (state[1] + b) >>> 0;
+        state[2] = (state[2] + c) >>> 0;
+        state[3] = (state[3] + d) >>> 0;
+        state[4] = (state[4] + e) >>> 0;
+        state[5] = (state[5] + f) >>> 0;
+        state[6] = (state[6] + g) >>> 0;
+        state[7] = (state[7] + h) >>> 0;
+      }
+      return Array.from(state).map(value => value.toString(16).padStart(8, '0')).join('').toUpperCase();
+    }
+
+    async function sha256Hex(text) {
+      if (window.crypto && window.crypto.subtle) {
+        const digest = await window.crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
+        return Array.from(new Uint8Array(digest)).map(byte => byte.toString(16).padStart(2, '0')).join('').toUpperCase();
+      }
+      return sha256Fallback(text);
+    }
+
+    async function ensureClosedEvent(eventNo) {
+      const event = await apiRequest(`/events/${encodeURIComponent(eventNo)}`);
+      if (event.col !== 'closed') throw new Error('该事件尚未闭环，不能导出归档单');
+      return event;
+    }
+
+    function buildEventArchiveHtml(event, auditHash, exportedAt) {
+      const histories = event.history || [];
+      const rows = histories.length
+        ? histories.map(item => `
+          <tr>
+            <td style="border:1px solid #444; padding:6px 7px; text-align:center; width:15%;">${escapePdfText(item.stage)}</td>
+            <td style="border:1px solid #444; padding:6px 7px; text-align:center; width:13%;">${escapePdfText(item.operator)}</td>
+            <td style="border:1px solid #444; padding:6px 7px; text-align:center; width:16%; font-family:monospace; font-size:10px;">${escapePdfText(formatEventDateTime(item.acted_at || item.time))}</td>
+            <td style="border:1px solid #444; padding:6px 7px; word-break:break-all; width:56%;">${escapePdfText(item.note)}</td>
+          </tr>`).join('')
+        : '<tr><td colspan="4" style="border:1px solid #444; padding:8px; text-align:center; color:#666;">暂无处置轨迹记录</td></tr>';
+      return `
+        <div style="text-align:center; border-bottom:2px solid #111; padding-bottom:10px; margin-bottom:14px;">
+          <div style="font-size:18px; font-weight:bold; letter-spacing:0.5px;">中国散裂中子源 (CSNS)</div>
+          <div style="font-size:15px; margin-top:4px;">运行事件处置与排故闭环归档单</div>
+        </div>
+        <table style="width:100%; border-collapse:collapse; font-size:11px; margin-bottom:12px; table-layout:fixed;">
+          <tr><th style="border:1px solid #444; padding:5px 7px; background:#f2f2f2; width:17%; text-align:left;">工单号</th><td style="border:1px solid #444; padding:5px 7px; width:33%; font-family:monospace; font-weight:bold;">${escapePdfText(event.id)}</td><th style="border:1px solid #444; padding:5px 7px; background:#f2f2f2; width:17%; text-align:left;">严重级别</th><td style="border:1px solid #444; padding:5px 7px; width:33%;">${escapePdfText(event.priority)}</td></tr>
+          <tr><th style="border:1px solid #444; padding:5px 7px; background:#f2f2f2; text-align:left;">异常主题</th><td colspan="3" style="border:1px solid #444; padding:5px 7px; word-break:break-all;">${escapePdfText(event.title)}</td></tr>
+          <tr><th style="border:1px solid #444; padding:5px 7px; background:#f2f2f2; text-align:left;">涉及设备/谱仪</th><td style="border:1px solid #444; padding:5px 7px;">${escapePdfText(event.device)}</td><th style="border:1px solid #444; padding:5px 7px; background:#f2f2f2; text-align:left;">初始报告人</th><td style="border:1px solid #444; padding:5px 7px;">${escapePdfText(event.reporter)}</td></tr>
+          <tr><th style="border:1px solid #444; padding:5px 7px; background:#f2f2f2; text-align:left;">建单时间</th><td style="border:1px solid #444; padding:5px 7px; font-family:monospace; font-size:10px;">${escapePdfText(formatEventDateTime(event.created_at))}</td><th style="border:1px solid #444; padding:5px 7px; background:#f2f2f2; text-align:left;">闭环时间</th><td style="border:1px solid #444; padding:5px 7px; font-family:monospace; font-size:10px;">${escapePdfText(formatEventDateTime(event.closed_at))}</td></tr>
+          <tr><th style="border:1px solid #444; padding:5px 7px; background:#f2f2f2; text-align:left;">闭环责任人</th><td colspan="3" style="border:1px solid #444; padding:5px 7px;">${escapePdfText(event.closer || '--')}</td></tr>
+        </table>
+        <div style="font-size:12px; font-weight:bold; margin:12px 0 6px;">一、初始现场现象与报警描述</div>
+        <div style="border:1px solid #444; min-height:54px; padding:7px 9px; font-size:11px; line-height:1.7; word-break:break-all;">${escapePdfText(event.notes)}</div>
+        <div style="font-size:12px; font-weight:bold; margin:14px 0 6px;">二、全流程处置轨迹时序表</div>
+        <table style="width:100%; border-collapse:collapse; font-size:10.5px; table-layout:fixed;">
+          <thead><tr style="background:#f2f2f2;"><th style="border:1px solid #444; padding:6px 7px;">推进阶段</th><th style="border:1px solid #444; padding:6px 7px;">记录人/复核人</th><th style="border:1px solid #444; padding:6px 7px;">时间戳</th><th style="border:1px solid #444; padding:6px 7px;">详细处置动作与排查说明</th></tr></thead>
+          <tbody>${rows}</tbody>
+        </table>
+        <div style="margin-top:18px; border:1.5px solid #111; padding:8px 10px; font-size:9.5px; color:#333; line-height:1.6;">
+          <div><strong>防伪审计戳 (SHA-256)：</strong> <span style="font-family:monospace; word-break:break-all;">${escapePdfText(auditHash)}</span></div>
+          <div style="margin-top:3px;"><strong>导出时间：</strong>${escapePdfText(exportedAt)}　　归档人：${escapePdfText(currentUser.name || '')}</div>
+        </div>`;
+    }
+
+    async function exportClosedEventPdf(eventNo) {
+      if (currentUser.role === 'viewer') return showToast('⚠️ 权限拦截：只读观察员不可导出闭环单据');
+      try {
+        const event = await ensureClosedEvent(eventNo);
+        const exportedAt = new Date().toISOString().replace('T', ' ').substring(0, 19);
+        const auditText = `${event.id}|${event.created_at}|${event.closed_at}|${(event.history || []).map(item => `${item.stage_key}:${item.acted_at}:${item.note}`).join('|')}|${exportedAt}`;
+        const auditHash = await sha256Hex(auditText);
+        const element = document.getElementById('printableEventArchive');
+        element.innerHTML = buildEventArchiveHtml(event, auditHash, exportedAt);
+        const wrapper = document.getElementById('eventPdfPrintWrapper');
+        wrapper.style.display = 'block';
+        showToast(`正在生成 [${event.id}] 独立闭环归档单...`);
+        await html2pdf().set({
+          margin: [10, 10, 10, 10],
+          filename: `CSNS_运行事件闭环归档单_${event.id}.pdf`,
+          image: { type: 'jpeg', quality: 0.98 },
+          html2canvas: { scale: 2, useCORS: true, backgroundColor: '#ffffff', scrollX: 0, scrollY: 0 },
+          jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
+          pagebreak: { mode: ['css', 'legacy'], avoid: ['.pdf-avoid-break', 'tr'] }
+        }).from(element).save();
+        wrapper.style.display = 'none';
+        showToast(`闭环归档单 [${event.id}] 已生成`);
+      } catch (error) {
+        document.getElementById('eventPdfPrintWrapper').style.display = 'none';
+        showToast(`⚠️ ${error.message}`);
+      }
+    }
+
+    function openEventBatchExportModal() {
+      if (currentUser.role !== 'admin') return showToast('⚠️ 仅系统管理员可批量导出闭环事件');
+      const now = new Date();
+      const start = new Date(now.getTime() - 30 * 86400000);
+      document.getElementById('batchStartAt').value = localDateTimeValue(start);
+      document.getElementById('batchEndAt').value = localDateTimeValue(now);
+      document.getElementById('modalEventBatchExport').classList.remove('hidden');
+    }
+
+    function localDateTimeValue(date) {
+      const pad = value => String(value).padStart(2, '0');
+      return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+    }
+
+    function setBatchRange(range) {
+      const now = new Date();
+      let start;
+      if (range === 'week') {
+        const day = (now.getDay() + 6) % 7;
+        start = new Date(now);
+        start.setDate(now.getDate() - day);
+        start.setHours(0, 0, 0, 0);
+      } else if (range === 'month') {
+        start = new Date(now.getFullYear(), now.getMonth(), 1);
+      } else {
+        start = new Date(now.getTime() - 30 * 86400000);
+      }
+      document.getElementById('batchStartAt').value = localDateTimeValue(start);
+      document.getElementById('batchEndAt').value = localDateTimeValue(now);
+    }
+
+    function buildBatchArchiveHtml(events, startAt, endAt, auditHash, exportedAt) {
+      const counts = { 紧急: 0, 重要: 0, 一般: 0 };
+      events.forEach(item => { if (counts[item.priority] !== undefined) counts[item.priority]++; });
+      const cards = events.map(event => `
+        <div style="border:1px solid #777; margin-bottom:8px; padding:7px 9px; page-break-inside:avoid; font-size:10.5px;">
+          <div style="display:flex; justify-content:space-between; gap:8px; border-bottom:1px solid #ddd; padding-bottom:4px; margin-bottom:4px;">
+            <strong style="font-family:monospace;">${escapePdfText(event.id)}</strong>
+            <span>${escapePdfText(event.priority)}　闭环：${escapePdfText(formatEventDateTime(event.closed_at))}</span>
+          </div>
+          <div style="font-weight:bold; margin-bottom:3px; word-break:break-all;">${escapePdfText(event.title)}</div>
+          <div style="color:#333;">设备/谱仪：${escapePdfText(event.device)}　报告人：${escapePdfText(event.reporter)}　闭环责任人：${escapePdfText(event.closer || '--')}</div>
+          <div style="margin-top:3px; line-height:1.55; word-break:break-all;"><strong>处置结论：</strong>${escapePdfText((event.history && event.history.length) ? event.history[event.history.length - 1].note : event.notes)}</div>
+        </div>`).join('');
+      return `
+        <div style="text-align:center; border-bottom:2px solid #111; padding-bottom:10px; margin-bottom:13px;">
+          <div style="font-size:18px; font-weight:bold;">中国散裂中子源 (CSNS)</div>
+          <div style="font-size:15px; margin-top:4px;">运行事件处置闭环汇总台账</div>
+        </div>
+        <table style="width:100%; border-collapse:collapse; font-size:10.5px; margin-bottom:11px; table-layout:fixed;">
+          <tr><th style="border:1px solid #444; background:#f2f2f2; padding:5px 7px; text-align:left; width:16%;">统计时间范围</th><td style="border:1px solid #444; padding:5px 7px; font-family:monospace; font-size:9.5px;">${escapePdfText(startAt)} ~ ${escapePdfText(endAt)}</td><th style="border:1px solid #444; background:#f2f2f2; padding:5px 7px; text-align:left; width:13%;">闭环总数</th><td style="border:1px solid #444; padding:5px 7px; font-weight:bold;">${events.length} 单</td></tr>
+          <tr><th style="border:1px solid #444; background:#f2f2f2; padding:5px 7px; text-align:left;">严重级别分布</th><td colspan="3" style="border:1px solid #444; padding:5px 7px;">紧急：${counts.紧急}　重要：${counts.重要}　一般：${counts.一般}</td></tr>
+        </table>
+        <div style="font-size:12px; font-weight:bold; margin:10px 0 6px;">一、闭环事件汇总明细 (按闭环时间倒序)</div>
+        ${cards || '<div style="border:1px solid #777; padding:12px; text-align:center; color:#666;">所选时间范围内没有闭环事件</div>'}
+        <div style="margin-top:16px; border:1.5px solid #111; padding:8px 10px; font-size:9.5px; color:#333; line-height:1.6;">
+          <div><strong>管理员签章：</strong>____________________　　导出人：${escapePdfText(currentUser.name || '')}　　导出时间：${escapePdfText(exportedAt)}</div>
+          <div style="margin-top:3px;"><strong>防伪审计戳 (SHA-256)：</strong><span style="font-family:monospace; word-break:break-all;">${escapePdfText(auditHash)}</span></div>
+        </div>`;
+    }
+
+    async function exportClosedEventsBatchPdf() {
+      if (currentUser.role !== 'admin') return showToast('⚠️ 仅系统管理员可批量导出闭环事件');
+      const startValue = document.getElementById('batchStartAt').value;
+      const endValue = document.getElementById('batchEndAt').value;
+      if (!startValue || !endValue) return showToast('请选择完整的开始和结束时间');
+      if (new Date(endValue) <= new Date(startValue)) return showToast('结束时间必须晚于开始时间');
+      const button = document.getElementById('btnConfirmBatchExport');
+      button.disabled = true;
+      button.innerText = '正在汇总...';
+      try {
+        const query = new URLSearchParams({
+          stage: 'closed',
+          start_at: new Date(startValue).toISOString(),
+          end_at: new Date(endValue).toISOString()
+        });
+        const events = await apiRequest(`/events?${query.toString()}`);
+        const exportedAt = new Date().toISOString().replace('T', ' ').substring(0, 19);
+        const auditText = `${startValue}|${endValue}|${events.map(item => `${item.id}:${item.closed_at}`).join('|')}|${exportedAt}`;
+        const auditHash = await sha256Hex(auditText);
+        document.getElementById('printableEventArchive').innerHTML = buildBatchArchiveHtml(events, startValue.replace('T', ' '), endValue.replace('T', ' '), auditHash, exportedAt);
+        const wrapper = document.getElementById('eventPdfPrintWrapper');
+        wrapper.style.display = 'block';
+        await html2pdf().set({
+          margin: [10, 10, 10, 10],
+          filename: `CSNS_运行事件闭环汇总台账_${startValue.substring(0, 10)}_${endValue.substring(0, 10)}.pdf`,
+          image: { type: 'jpeg', quality: 0.98 },
+          html2canvas: { scale: 2, useCORS: true, backgroundColor: '#ffffff', scrollX: 0, scrollY: 0 },
+          jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
+          pagebreak: { mode: ['css', 'legacy'], avoid: ['.pdf-avoid-break', 'tr'] }
+        }).from(document.getElementById('printableEventArchive')).save();
+        wrapper.style.display = 'none';
+        closeEventBatchExportModal();
+        showToast(`闭环汇总台账已导出，共 ${events.length} 单`);
+      } catch (error) {
+        document.getElementById('eventPdfPrintWrapper').style.display = 'none';
+        showToast(`⚠️ ${error.message}`);
+      } finally {
+        button.disabled = false;
+        button.innerText = '确认导出';
+      }
+    }
 
     window.addEventListener('load', () => {
       if (getToken()) {

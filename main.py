@@ -1,3 +1,4 @@
+import hashlib
 from contextlib import asynccontextmanager
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
@@ -25,6 +26,7 @@ from models import (
     DutyShift,
     Event,
     EventHistory,
+    LogTarget,
     NavItem,
     PatrolSlot,
     ShiftHandover,
@@ -189,6 +191,36 @@ def seed_database(db: Session) -> DutyShift:
             Event(event_no="EV-2026-005", title="靶站 2 号主循环冷水泵轴承振动偏高预警", device="靶站一次循环泵", priority="一般", reporter_name="王征", stage="closed", notes="专业水冷组到场加注润滑脂后振动幅值回落至合格区间，闭环。", created_shift_id=shift.id if shift else None, closed_at=utcnow()),
         ]
         db.add_all(events)
+        db.flush()
+        for event in events:
+            closed_notes = {
+                "EV-2026-004": "重新压接航空插头并做 12 小时连续测温，通道读数稳定，确认缺陷消除。",
+                "EV-2026-005": "水冷组加注润滑脂并复测轴承振动，幅值回落至合格区间。",
+            }
+            for stage, operator_name, note in [
+                ("pending", event.reporter_name, event.notes),
+                *([("closed", event.reporter_name, closed_notes[event.event_no])] if event.stage == "closed" else []),
+            ]:
+                db.add(EventHistory(event_id=event.id, from_stage=None, to_stage=stage, operator_name=operator_name, note=note))
+        db.flush()
+
+    closed_events = db.scalars(
+        select(Event).where(Event.stage == "closed").order_by(Event.id)
+    ).all()
+    for event in closed_events:
+        if event.closed_at is None:
+            event.closed_at = event.created_at
+        if not db.scalar(select(EventHistory).where(EventHistory.event_id == event.id).limit(1)):
+            db.add(
+                EventHistory(
+                    event_id=event.id,
+                    from_stage=None,
+                    to_stage="closed",
+                    operator_name=event.reporter_name,
+                    note=event.notes,
+                    acted_at=event.closed_at,
+                )
+            )
 
     if db.scalar(select(NavItem).limit(1)) is None:
         db.add_all(
@@ -199,6 +231,15 @@ def seed_database(db: Session) -> DutyShift:
                 NavItem(name="靶站一次水冷回路中央监视", description="冷水机温度、靶体冷却水压差与电导率监测", target_path="http://monitor.csns.ihep.ac.cn/target_water", icon="ph-drop", categories=["target_control"], sort_order=40),
                 NavItem(name="质子打靶功率与束流趋势大屏", description="打靶功率 (kW)、质子束截面分布与重频波形", target_path="http://monitor.csns.ihep.ac.cn/beam_trend", icon="ph-chart-line-up", categories=["target_control"], sort_order=50),
                 NavItem(name="样品环境低温与强磁总览中枢", description="LakeShore 控制器阵列、超导磁体液氦液位", target_path="opi://sample_env/cryo_overview.bob", icon="ph-snowflake", categories=["sample_env", "target_control"], sort_order=60),
+            ]
+        )
+
+    if db.scalar(select(LogTarget).limit(1)) is None:
+        db.add_all(
+            [
+                LogTarget(name="SANS (小角散射)", is_system=True, sort_order=10),
+                LogTarget(name="MR (反射物理谱仪)", is_system=True, sort_order=20),
+                LogTarget(name="靶站水冷回路", is_system=True, sort_order=30),
             ]
         )
 
@@ -249,6 +290,15 @@ class RegisterPayload(BaseModel):
 class RolePayload(BaseModel):
     role: Literal["admin", "operator", "viewer"]
     status: str = "active"
+
+
+class UserUpdatePayload(BaseModel):
+    username: Optional[str] = Field(default=None, min_length=2, max_length=80)
+    real_name: Optional[str] = Field(default=None, min_length=1, max_length=80)
+    dept: Optional[str] = Field(default=None, max_length=160)
+    role: Optional[Literal["admin", "operator", "viewer"]] = None
+    status: Optional[Literal["active", "pending", "disabled"]] = None
+    password: Optional[str] = Field(default=None, min_length=6, max_length=128)
 
 
 class ShiftPayload(BaseModel):
@@ -318,6 +368,11 @@ class NavCreatePayload(BaseModel):
     target_path: str = Field(min_length=1, max_length=500)
     icon: str = Field(default="ph-compass-tool", max_length=80)
     categories: list[str] = Field(min_length=1)
+
+
+class LogTargetCreatePayload(BaseModel):
+    name: str = Field(min_length=1, max_length=160)
+    sort_order: Optional[int] = Field(default=None, ge=0, le=100000)
 
 
 class HandoverPayload(BaseModel):
@@ -402,13 +457,19 @@ def history_dict(history: EventHistory) -> dict:
     return {
         "id": history.id,
         "time": display_minute(history.acted_at),
+        "acted_at": iso(history.acted_at),
         "operator": history.operator_name,
         "stage": STAGE_NAMES.get(history.to_stage, history.to_stage),
+        "stage_key": history.to_stage,
         "note": history.note,
     }
 
 
 def event_dict(event: Event) -> dict:
+    closer = next(
+        (item.operator_name for item in reversed(event.history) if item.to_stage == "closed"),
+        "",
+    )
     return {
         "id": event.event_no,
         "event_id": event.id,
@@ -418,6 +479,8 @@ def event_dict(event: Event) -> dict:
         "reporter": event.reporter_name,
         "time": display_minute(event.created_at),
         "created_at": iso(event.created_at),
+        "closed_at": iso(event.closed_at),
+        "closer": closer,
         "col": event.stage,
         "notes": event.notes,
         "history": [history_dict(item) for item in event.history],
@@ -432,6 +495,16 @@ def nav_dict(item: NavItem) -> dict:
         "path": item.target_path,
         "icon": item.icon,
         "categories": item.categories or [],
+    }
+
+
+def log_target_dict(item: LogTarget) -> dict:
+    return {
+        "id": item.id,
+        "name": item.name,
+        "is_system": item.is_system,
+        "sort_order": item.sort_order,
+        "created_at": iso(item.created_at),
     }
 
 
@@ -544,14 +617,63 @@ def list_users(_admin: User = Depends(require_admin), db: Session = Depends(get_
 
 
 @app.patch("/api/v1/users/{user_id}")
-def change_user_role(user_id: int, payload: RolePayload, _admin: User = Depends(require_admin), db: Session = Depends(get_db)):
+def update_user(user_id: int, payload: UserUpdatePayload, admin: User = Depends(require_admin), db: Session = Depends(get_db)):
     user = db.get(User, user_id)
     if user is None:
         raise HTTPException(status_code=404, detail="用户不存在")
-    user.role = payload.role
-    user.status = payload.status
+
+    data = payload.model_dump(exclude_unset=True)
+    if "username" in data:
+        username = data["username"].strip()
+        if not username:
+            raise HTTPException(status_code=422, detail="用户名不能为空")
+        duplicate = db.scalar(select(User).where(User.username == username, User.id != user_id))
+        if duplicate:
+            raise HTTPException(status_code=409, detail="该用户名已被其他账号占用")
+        user.username = username
+    if "real_name" in data:
+        real_name = data["real_name"].strip()
+        if not real_name:
+            raise HTTPException(status_code=422, detail="姓名不能为空")
+        user.real_name = real_name
+    if "dept" in data:
+        user.dept = data["dept"].strip()
+    if "role" in data:
+        user.role = data["role"]
+    if "status" in data:
+        user.status = data["status"]
+    if data.get("password"):
+        user.password_hash = hash_password(data["password"])
+
+    self_losing_admin = user.id == admin.id and (user.role != "admin" or user.status != "active")
+    if self_losing_admin:
+        raise HTTPException(status_code=409, detail="不能取消当前登录管理员自身的权限或停用该账号")
+    if user.role != "admin" or user.status != "active":
+        if db.scalar(select(func.count()).select_from(User).where(User.role == "admin", User.status == "active")) == 0:
+            db.rollback()
+            raise HTTPException(status_code=409, detail="系统必须保留至少一名可用的管理员账号")
+
     db.commit()
     return user_dict(user)
+
+
+@app.delete("/api/v1/users/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_user(user_id: int, admin: User = Depends(require_admin), db: Session = Depends(get_db)):
+    user = db.get(User, user_id)
+    if user is None:
+        raise HTTPException(status_code=404, detail="用户不存在")
+    if user.id == admin.id:
+        raise HTTPException(status_code=409, detail="不能删除当前登录的管理员账号")
+    if user.role == "admin" and user.status == "active":
+        remaining = db.scalar(
+            select(func.count()).select_from(User).where(
+                User.role == "admin", User.status == "active", User.id != user.id
+            )
+        )
+        if not remaining:
+            raise HTTPException(status_code=409, detail="系统必须保留至少一名可用的管理员账号")
+    db.delete(user)
+    db.commit()
 
 
 @app.get("/api/v1/shifts/current")
@@ -767,9 +889,47 @@ def reset_patrol_slot(slot_id: int, _user: User = Depends(require_operator_or_ad
 
 
 @app.get("/api/v1/events")
-def list_events(_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    events = db.scalars(select(Event).options(selectinload(Event.history)).order_by(Event.created_at.desc())).all()
-    return [event_dict(item) for item in events]
+def list_events(
+    stage: Optional[str] = Query(default=None),
+    start_at: Optional[datetime] = Query(default=None),
+    end_at: Optional[datetime] = Query(default=None),
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    if stage is not None and stage not in STAGES:
+        raise HTTPException(status_code=422, detail="无效的事件阶段")
+    if start_at is not None and end_at is not None and as_naive_utc(end_at) <= as_naive_utc(start_at):
+        raise HTTPException(status_code=422, detail="结束时间必须晚于开始时间")
+    if (start_at is not None or end_at is not None) and user.role != "admin":
+        raise HTTPException(status_code=403, detail="仅系统管理员可按时间范围批量调取事件")
+
+    statement = select(Event).options(selectinload(Event.history))
+    if stage is not None:
+        statement = statement.where(Event.stage == stage)
+    if start_at is not None:
+        statement = statement.where(Event.closed_at.is_not(None), Event.closed_at >= as_naive_utc(start_at))
+    if end_at is not None:
+        statement = statement.where(Event.closed_at.is_not(None), Event.closed_at <= as_naive_utc(end_at))
+    order_column = Event.closed_at if stage == "closed" or start_at is not None or end_at is not None else Event.created_at
+    events = db.scalars(statement.order_by(order_column.desc(), Event.id.desc())).all()
+    result = [event_dict(item) for item in events]
+    if result:
+        digest = hashlib.sha256(
+            "|".join(item["id"] for item in result).encode("utf-8")
+        ).hexdigest().upper()
+        for item in result:
+            item["batch_audit_hash"] = digest
+    return result
+
+
+@app.get("/api/v1/events/{event_no}")
+def get_event(event_no: str, _user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    event = db.scalar(
+        select(Event).options(selectinload(Event.history)).where(Event.event_no == event_no)
+    )
+    if event is None:
+        raise HTTPException(status_code=404, detail="事件不存在")
+    return event_dict(event)
 
 
 @app.post("/api/v1/events", status_code=status.HTTP_201_CREATED)
@@ -832,6 +992,43 @@ def transition_event(event_no: str, payload: EventTransitionPayload, user: User 
 def list_nav_items(_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     items = db.scalars(select(NavItem).where(NavItem.is_active.is_(True)).order_by(NavItem.sort_order, NavItem.id)).all()
     return [nav_dict(item) for item in items]
+
+
+@app.get("/api/v1/log-targets")
+def list_log_targets(_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    items = db.scalars(select(LogTarget).order_by(LogTarget.sort_order, LogTarget.id)).all()
+    return [log_target_dict(item) for item in items]
+
+
+@app.post("/api/v1/log-targets", status_code=status.HTTP_201_CREATED)
+def create_log_target(payload: LogTargetCreatePayload, _user: User = Depends(require_operator_or_admin), db: Session = Depends(get_db)):
+    name = payload.name.strip()
+    if not name:
+        raise HTTPException(status_code=422, detail="来源名称不能为空")
+    duplicate = db.scalar(select(LogTarget).where(func.lower(LogTarget.name) == name.lower()))
+    if duplicate:
+        raise HTTPException(status_code=409, detail="该来源名称已存在")
+    if payload.sort_order is None:
+        max_order = db.scalar(select(func.max(LogTarget.sort_order))) or 0
+        sort_order = max_order + 10
+    else:
+        sort_order = payload.sort_order
+    item = LogTarget(name=name, is_system=False, sort_order=sort_order)
+    db.add(item)
+    db.commit()
+    return log_target_dict(item)
+
+
+@app.delete("/api/v1/log-targets/{target_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_log_target(target_id: int, _admin: User = Depends(require_admin), db: Session = Depends(get_db)):
+    item = db.get(LogTarget, target_id)
+    if item is None:
+        raise HTTPException(status_code=404, detail="来源不存在")
+    remaining = db.scalar(select(func.count()).select_from(LogTarget).where(LogTarget.id != target_id)) or 0
+    if remaining == 0:
+        raise HTTPException(status_code=409, detail="必须至少保留一个事件来源")
+    db.delete(item)
+    db.commit()
 
 
 @app.post("/api/v1/nav-items", status_code=status.HTTP_201_CREATED)
