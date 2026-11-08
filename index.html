@@ -68,10 +68,22 @@
     .glow-amber {
       box-shadow: 0 0 15px rgba(245, 158, 11, 0.25);
     }
+    #eventPdfPrintWrapper,
+    #eventPdfPrintWrapper * {
+      box-sizing: border-box;
+    }
     #printableEventArchive {
+      width: 750px !important;
+      margin: 0 auto;
+      padding: 20px 24px;
       overflow: visible;
+      background: #ffffff;
     }
     #printableEventArchive table {
+      width: 100% !important;
+      max-width: 100% !important;
+      table-layout: fixed !important;
+      border-collapse: collapse;
       page-break-inside: auto;
       break-inside: auto;
     }
@@ -85,9 +97,19 @@
     }
     #printableEventArchive td,
     #printableEventArchive th {
+      box-sizing: border-box;
+      word-break: break-all;
       overflow-wrap: break-word;
-      word-break: break-word;
+      white-space: normal;
       vertical-align: top;
+    }
+    #printableEventArchive .pdf-audit-footer,
+    #printableEventArchive .pdf-section-title,
+    #printableEventArchive .pdf-document-header {
+      max-width: 100%;
+      box-sizing: border-box;
+      page-break-inside: avoid;
+      break-inside: avoid;
     }
   </style>
 </head>
@@ -212,6 +234,13 @@
         <button onclick="switchTab('sop')" id="nav-sop" class="nav-btn w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-slate-300 hover:text-white hover:bg-slate-800/60 transition-all duration-150 border border-transparent">
           <i class="ph ph-shield-check text-xl shrink-0"></i>
           <span class="hidden md:inline truncate">谱仪协作与SOP向导</span>
+        </button>
+
+        <!-- Tab 5: 智能 Agent 诊断中枢 -->
+        <button onclick="switchTab('agent')" id="nav-agent" class="nav-btn w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-slate-300 hover:text-white hover:bg-slate-800/60 transition-all duration-150 border border-transparent">
+          <i class="ph ph-cpu text-xl shrink-0"></i>
+          <span class="hidden md:inline truncate">智能Agent中枢</span>
+          <span id="badge-agent-alert" class="ml-auto bg-amber-500/15 text-amber-300 text-[10px] font-mono px-1.5 py-0.5 rounded border border-amber-500/30 hidden md:inline">1预警</span>
         </button>
       </div>
 
@@ -778,6 +807,246 @@
 
         </div>
 
+      </section>
+
+      <!-- ======================================================== -->
+      <!-- MODULE 5: 智能 Agent 诊断中枢 (AI AGENT HUB) -->
+      <!-- ======================================================== -->
+      <section id="view-agent" class="tab-view hidden space-y-6">
+        <div class="bg-[#0e1626] border border-slate-800 rounded-xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div class="flex items-center gap-3">
+            <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-sky-600/30 to-cyan-400/10 border border-sky-500/40 flex items-center justify-center text-sky-300 shadow-lg shadow-sky-500/10">
+              <i class="ph ph-cpu text-2xl"></i>
+            </div>
+            <div>
+              <div class="flex items-center gap-2">
+                <h2 class="text-base font-bold text-white">智能 Agent 诊断中枢</h2>
+                <span class="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-500/10 text-emerald-300 border border-emerald-500/30">HEPAI · ONLINE</span>
+              </div>
+              <p class="text-xs text-slate-400 mt-0.5">面向靶站水冷、低温样品环境与谱仪大厅的多 Agent 实时感知、机理归因与闭环处置中枢</p>
+            </div>
+          </div>
+          <div class="flex items-center gap-2 text-[10px] font-mono text-slate-400">
+            <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+            <span>AGENT MESH HEALTHY · 4 NODES</span>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 xl:grid-cols-12 gap-6">
+          <!-- LEFT: Agent Cluster -->
+          <aside class="xl:col-span-4 space-y-4">
+            <div class="bg-[#0e1626] border border-slate-800 rounded-xl p-4">
+              <div class="flex items-center justify-between">
+                <div>
+                  <div class="text-xs font-bold text-white">Agent 集群状态</div>
+                  <div class="text-[10px] text-slate-500 mt-0.5">实时推理与感知节点总览</div>
+                </div>
+                <i class="ph ph-pulse text-emerald-400 text-xl"></i>
+              </div>
+              <div class="grid grid-cols-2 gap-2 mt-3">
+                <div class="rounded-lg bg-emerald-950/25 border border-emerald-800/40 px-3 py-2">
+                  <div class="text-[10px] text-emerald-300/80">运行中</div>
+                  <div class="text-xl font-mono font-bold text-emerald-300">3</div>
+                </div>
+                <div class="rounded-lg bg-amber-950/25 border border-amber-700/40 px-3 py-2">
+                  <div class="text-[10px] text-amber-300/80">预警</div>
+                  <div class="text-xl font-mono font-bold text-amber-300">1</div>
+                </div>
+              </div>
+            </div>
+
+            <div class="space-y-3" id="agentClusterList">
+              <button type="button" onclick="selectAgent('hydrogen')" data-agent-id="hydrogen" class="agent-card w-full text-left p-4 rounded-xl bg-slate-900 border border-amber-500/50 bg-amber-950/10 transition-all hover:border-amber-400/70">
+                <div class="flex items-start justify-between gap-2">
+                  <div class="flex items-start gap-2.5">
+                    <div class="w-8 h-8 rounded-lg bg-amber-500/15 border border-amber-500/30 flex items-center justify-center text-amber-300 shrink-0"><i class="ph ph-flask text-lg"></i></div>
+                    <div>
+                      <div class="text-xs font-bold text-white leading-snug">重水波动箱氢浓度监测 Agent</div>
+                      <div class="text-[10px] text-slate-400 mt-1">靶站水冷公用系统</div>
+                    </div>
+                  </div>
+                  <span class="w-2 h-2 rounded-full bg-amber-400 animate-pulse mt-1 shrink-0"></span>
+                </div>
+                <div class="mt-3 inline-flex items-center gap-1.5 px-2 py-1 rounded-md bg-amber-500/15 text-amber-300 border border-amber-500/30 text-[10px] font-semibold">
+                  <i class="ph ph-warning text-xs"></i> 早期累积预警 3.8%
+                </div>
+              </button>
+
+              <button type="button" onclick="selectAgent('water')" data-agent-id="water" class="agent-card w-full text-left p-4 rounded-xl bg-slate-900/60 border border-slate-800 hover:border-slate-700 transition-all">
+                <div class="flex items-start justify-between gap-2">
+                  <div class="flex items-start gap-2.5">
+                    <div class="w-8 h-8 rounded-lg bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-300 shrink-0"><i class="ph ph-drop text-lg"></i></div>
+                    <div>
+                      <div class="text-xs font-bold text-white leading-snug">靶站水冷一次回路微漂移预警 Agent</div>
+                      <div class="text-[10px] text-slate-400 mt-1">水冷回路</div>
+                    </div>
+                  </div>
+                  <span class="w-2 h-2 rounded-full bg-emerald-400 mt-1 shrink-0"></span>
+                </div>
+                <div class="mt-3 inline-flex items-center gap-1.5 px-2 py-1 rounded-md bg-emerald-500/10 text-emerald-300 border border-emerald-500/30 text-[10px] font-semibold">
+                  <i class="ph ph-check-circle text-xs"></i> 状态正常
+                </div>
+              </button>
+
+              <button type="button" onclick="selectAgent('cryo')" data-agent-id="cryo" class="agent-card w-full text-left p-4 rounded-xl bg-slate-900/60 border border-slate-800 hover:border-slate-700 transition-all">
+                <div class="flex items-start justify-between gap-2">
+                  <div class="flex items-start gap-2.5">
+                    <div class="w-8 h-8 rounded-lg bg-sky-500/10 border border-sky-500/30 flex items-center justify-center text-sky-300 shrink-0"><i class="ph ph-snowflake text-lg"></i></div>
+                    <div>
+                      <div class="text-xs font-bold text-white leading-snug">低温样品环境换样防呆向导 Agent</div>
+                      <div class="text-[10px] text-slate-400 mt-1">样品环境</div>
+                    </div>
+                  </div>
+                  <span class="w-2 h-2 rounded-full bg-sky-400 mt-1 shrink-0"></span>
+                </div>
+                <div class="mt-3 inline-flex items-center gap-1.5 px-2 py-1 rounded-md bg-sky-500/10 text-sky-300 border border-sky-500/30 text-[10px] font-semibold">
+                  <i class="ph ph-clock text-xs"></i> 就绪待命
+                </div>
+              </button>
+
+              <button type="button" onclick="selectAgent('patrol')" data-agent-id="patrol" class="agent-card w-full text-left p-4 rounded-xl bg-slate-900/60 border border-slate-800 hover:border-slate-700 transition-all">
+                <div class="flex items-start justify-between gap-2">
+                  <div class="flex items-start gap-2.5">
+                    <div class="w-8 h-8 rounded-lg bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-300 shrink-0"><i class="ph ph-eye text-lg"></i></div>
+                    <div>
+                      <div class="text-xs font-bold text-white leading-snug">谱仪大厅多模态巡检 Agent</div>
+                      <div class="text-[10px] text-slate-400 mt-1">现场巡检</div>
+                    </div>
+                  </div>
+                  <span class="w-2 h-2 rounded-full bg-emerald-400 mt-1 shrink-0"></span>
+                </div>
+                <div class="mt-3 inline-flex items-center gap-1.5 px-2 py-1 rounded-md bg-emerald-500/10 text-emerald-300 border border-emerald-500/30 text-[10px] font-semibold">
+                  <i class="ph ph-check-circle text-xs"></i> 正常
+                </div>
+              </button>
+            </div>
+          </aside>
+
+          <!-- RIGHT: Active Agent Workspace -->
+          <div class="xl:col-span-8 space-y-4" id="agentWorkbench">
+            <div class="bg-[#0e1626] border border-amber-500/25 rounded-xl p-5">
+              <div class="flex flex-col lg:flex-row lg:items-start justify-between gap-3 pb-4 border-b border-slate-800">
+                <div>
+                  <div class="flex flex-wrap items-center gap-2">
+                    <h3 class="text-sm font-bold text-white" id="agentWorkspaceTitle">重水波动箱氢浓度监测 Agent</h3>
+                    <span id="agentVersionTag" class="px-2 py-0.5 rounded text-[10px] font-mono text-sky-300 bg-sky-500/10 border border-sky-500/30">v2.4.1-hydrogen</span>
+                  </div>
+                  <div class="flex flex-wrap items-center gap-3 text-[10px] text-slate-400 mt-2">
+                    <span class="font-mono">MODEL: <strong class="text-slate-200">hepai/deepseek-v4-pro</strong></span>
+                    <span class="w-px h-3 bg-slate-700"></span>
+                    <span class="font-mono">机理层级: <strong class="text-emerald-300">PASS</strong></span>
+                    <span class="w-px h-3 bg-slate-700"></span>
+                    <span>最后推理 <span class="font-mono text-slate-300" id="agentLastInference">12s ago</span></span>
+                  </div>
+                </div>
+                <div class="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-emerald-950/25 border border-emerald-800/40 text-[10px] text-emerald-300 shrink-0">
+                  <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span> 推理链路在线
+                </div>
+              </div>
+              <div class="mt-4 rounded-xl border border-amber-500/40 bg-amber-950/20 p-4" id="agentVerdictBanner">
+                <div class="flex items-start gap-3">
+                  <div class="w-8 h-8 rounded-lg bg-amber-500/15 border border-amber-500/30 flex items-center justify-center text-amber-300 shrink-0"><i class="ph ph-brain text-lg"></i></div>
+                  <div>
+                    <div class="text-[10px] uppercase tracking-wider text-amber-300/80 font-bold">当前机理判定</div>
+                    <p class="text-xs text-amber-100 leading-relaxed mt-1" id="agentVerdictText">当前打靶功率 200kW 稳定，氢浓度平滑上升至 3.8%，判定为真实物理产氢累积，排气通畅但需前置关注。</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="bg-[#0e1626] border border-slate-800 rounded-xl p-5">
+              <div class="flex items-center justify-between mb-3">
+                <div class="flex items-center gap-2">
+                  <i class="ph ph-activity text-sky-400"></i>
+                  <h4 class="text-xs font-bold text-white">实时感知特征</h4>
+                </div>
+                <span class="text-[10px] font-mono text-slate-500">PV STREAM · LIVE</span>
+              </div>
+              <div class="grid grid-cols-2 md:grid-cols-5 gap-3" id="agentPvGrid">
+                <div class="rounded-lg bg-slate-900/70 border border-slate-800 p-3">
+                  <div class="text-[10px] text-slate-500">打靶功率</div>
+                  <div class="mt-1 text-lg font-mono font-bold text-sky-300">200<span class="text-xs font-normal text-slate-400"> kW</span></div>
+                  <div class="text-[9px] text-emerald-400 mt-1">● 稳定</div>
+                </div>
+                <div class="rounded-lg bg-slate-900/70 border border-amber-700/30 p-3">
+                  <div class="text-[10px] text-slate-500">实测氢浓度</div>
+                  <div class="mt-1 text-lg font-mono font-bold text-amber-300">3.82<span class="text-xs font-normal text-slate-400"> %</span></div>
+                  <div class="text-[9px] text-amber-400 mt-1">▲ 缓升</div>
+                </div>
+                <div class="rounded-lg bg-slate-900/70 border border-slate-800 p-3">
+                  <div class="text-[10px] text-slate-500">缓冲罐压力</div>
+                  <div class="mt-1 text-lg font-mono font-bold text-emerald-300">0.11<span class="text-xs font-normal text-slate-400"> MPa</span></div>
+                  <div class="text-[9px] text-emerald-400 mt-1">● 正常</div>
+                </div>
+                <div class="rounded-lg bg-slate-900/70 border border-slate-800 p-3">
+                  <div class="text-[10px] text-slate-500">驱动气压</div>
+                  <div class="mt-1 text-lg font-mono font-bold text-sky-300">0.45<span class="text-xs font-normal text-slate-400"> MPa</span></div>
+                  <div class="text-[9px] text-emerald-400 mt-1">● 正常</div>
+                </div>
+                <div class="rounded-lg bg-slate-900/70 border border-emerald-700/30 p-3 col-span-2 md:col-span-1">
+                  <div class="text-[10px] text-slate-500">工控机心跳</div>
+                  <div class="mt-1 text-base font-bold text-emerald-300">正常</div>
+                  <div class="text-[9px] text-emerald-400 mt-1">● 4ms</div>
+                </div>
+              </div>
+            </div>
+
+            <div class="bg-[#0e1626] border border-slate-800 rounded-xl p-5">
+              <div class="flex items-center gap-2 mb-4">
+                <i class="ph ph-tree-structure text-cyan-400"></i>
+                <h4 class="text-xs font-bold text-white">机理与大模型诊断流</h4>
+                <span class="px-1.5 py-0.5 rounded text-[9px] font-mono text-cyan-300 bg-cyan-500/10 border border-cyan-500/30">STRUCTURED REASONING</span>
+              </div>
+              <div class="space-y-3" id="agentDiagnosisFlow">
+                <div class="rounded-lg border border-slate-800 bg-slate-900/50 p-3.5">
+                  <div class="flex items-center gap-2 text-[11px] font-bold text-sky-300"><span class="w-5 h-5 rounded bg-sky-500/15 border border-sky-500/30 flex items-center justify-center text-[10px]">1</span>异常归因分析</div>
+                  <p class="text-[11px] text-slate-300 leading-relaxed mt-2">已排除工控机死机与气路欠压：心跳周期稳定在 4ms、驱动气压维持 0.45MPa，且 PV 数据无中断跳变；氢浓度呈平滑单调上升，符合真实物理产氢而非传感器或通讯故障。</p>
+                </div>
+                <div class="rounded-lg border border-slate-800 bg-slate-900/50 p-3.5">
+                  <div class="flex items-center gap-2 text-[11px] font-bold text-sky-300"><span class="w-5 h-5 rounded bg-sky-500/15 border border-sky-500/30 flex items-center justify-center text-[10px]">2</span>历史溯源参考</div>
+                  <p class="text-[11px] text-slate-300 leading-relaxed mt-2">引用历史档案《2022-10-14 水冷系统排气记录》：同类打靶功率区间曾出现 3.5%~4.1% 的氢累积平台，通过在线排气与持续观察恢复至 2.6%。</p>
+                </div>
+                <div class="rounded-lg border border-slate-800 bg-slate-900/50 p-3.5">
+                  <div class="flex items-center gap-2 text-[11px] font-bold text-sky-300"><span class="w-5 h-5 rounded bg-sky-500/15 border border-sky-500/30 flex items-center justify-center text-[10px]">3</span>排障动作建议</div>
+                  <p class="text-[11px] text-slate-300 leading-relaxed mt-2">核实在线自动排气阀开位与反馈信号，确认排气通畅；保持打靶工况不变，持续观察 30 分钟氢浓度趋势与缓冲罐压力变化。</p>
+                </div>
+                <div class="rounded-lg border border-rose-500/60 bg-rose-950/30 p-3.5 shadow-lg shadow-rose-950/20">
+                  <div class="flex items-center gap-2 text-[11px] font-bold text-rose-300"><span class="w-5 h-5 rounded bg-rose-500/20 border border-rose-500/40 flex items-center justify-center text-[10px]">4</span>刚性安全红线</div>
+                  <p class="text-xs font-bold text-rose-200 leading-relaxed mt-2">氢浓度未降至 3.0% 以下严禁关闭排气。</p>
+                </div>
+              </div>
+            </div>
+
+            <div class="bg-[#0e1626] border border-slate-800 rounded-xl p-5 space-y-4">
+              <div class="flex items-center gap-2">
+                <i class="ph ph-plugs-connected text-emerald-400"></i>
+                <h4 class="text-xs font-bold text-white">闭环联动与交互工具栏</h4>
+                <span class="text-[10px] text-slate-500">CROSS-MODULE ORCHESTRATION</span>
+              </div>
+              <div class="grid grid-cols-1 md:grid-cols-3 gap-2.5">
+                <button type="button" onclick="agentCreateEvent()" class="px-3 py-2.5 rounded-lg bg-sky-600/15 hover:bg-sky-600/30 text-sky-300 border border-sky-500/40 text-[11px] font-semibold flex items-center justify-center gap-1.5 transition-all">
+                  <i class="ph ph-kanban"></i> 📋 一键生成看板工单 <span class="text-[9px] text-sky-400/70">模块2</span>
+                </button>
+                <button type="button" onclick="agentOpenSop()" class="px-3 py-2.5 rounded-lg bg-indigo-600/15 hover:bg-indigo-600/30 text-indigo-300 border border-indigo-500/40 text-[11px] font-semibold flex items-center justify-center gap-1.5 transition-all">
+                  <i class="ph ph-book-open-text"></i> 📖 调阅排气规程向导 <span class="text-[9px] text-indigo-400/70">模块4</span>
+                </button>
+                <button type="button" onclick="agentWriteShiftLog()" class="px-3 py-2.5 rounded-lg bg-emerald-600/15 hover:bg-emerald-600/30 text-emerald-300 border border-emerald-500/40 text-[11px] font-semibold flex items-center justify-center gap-1.5 transition-all">
+                  <i class="ph ph-notepad"></i> 📝 记入本班值班流水 <span class="text-[9px] text-emerald-400/70">模块1</span>
+                </button>
+              </div>
+              <form onsubmit="handleAgentQuestion(event)" class="flex flex-col sm:flex-row items-stretch gap-2">
+                <div class="relative flex-1">
+                  <i class="ph ph-chat-circle-dots absolute left-3 top-1/2 -translate-y-1/2 text-slate-500"></i>
+                  <input id="agentQuestionInput" type="text" maxlength="300" placeholder="询问该 Agent 应对策略，例如：氢浓度若持续上升应如何处置？" class="w-full bg-slate-950 border border-slate-700 rounded-lg py-2.5 pl-9 pr-3 text-xs text-slate-200 placeholder:text-slate-600 focus:outline-none focus:border-sky-500">
+                </div>
+                <button type="submit" class="px-4 py-2.5 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-xs font-semibold text-slate-200 flex items-center justify-center gap-1.5">
+                  <i class="ph ph-paper-plane-tilt"></i> 追问
+                </button>
+              </form>
+              <div id="agentAnswerPanel" class="hidden rounded-lg border border-sky-800/40 bg-sky-950/20 p-3 text-[11px] leading-relaxed text-sky-100/90"></div>
+            </div>
+          </div>
+        </div>
       </section>
 
     </main>
@@ -1514,8 +1783,8 @@
     </div>
   </div>
 
-  <div id="eventPdfPrintWrapper" style="display:none; position:fixed; left:-10000px; top:0; width:794px; background:#fff;">
-    <div id="printableEventArchive" style="width:794px; min-height:1123px; margin:0 auto; padding:42px 46px; box-sizing:border-box; background:#fff; color:#111; font-family:'SimSun','Songti SC','STSong',serif; line-height:1.55;"></div>
+  <div id="eventPdfPrintWrapper" style="display:none; position:fixed; left:0; top:0; z-index:99999; width:750px; margin:0 auto; background:#ffffff;">
+    <div id="printableEventArchive" style="width:750px !important; min-height:1123px; margin:0 auto; padding:20px 24px; box-sizing:border-box; background:#ffffff; color:#111; font-family:'SimSun','Songti SC','STSong',serif; line-height:1.55;"></div>
   </div>
 
   <div id="modalLogTargets" class="fixed inset-0 bg-black/75 backdrop-blur-sm z-[60] hidden flex items-center justify-center p-4">
@@ -1767,6 +2036,20 @@
         btnBatchExport.title = canBatchExport ? '按时间范围批量汇总闭环事件' : '仅系统管理员可用';
       }
 
+      document.querySelectorAll('#view-agent [onclick="agentCreateEvent()"], #view-agent [onclick="agentWriteShiftLog()"]').forEach(button => {
+        button.disabled = isViewer;
+        button.classList.toggle('opacity-45', isViewer);
+        button.classList.toggle('cursor-not-allowed', isViewer);
+      });
+      const agentQuestion = document.getElementById('agentQuestionInput');
+      if (agentQuestion) agentQuestion.disabled = isViewer;
+      const agentQuestionButton = document.querySelector('#view-agent form[onsubmit="handleAgentQuestion(event)"] button[type="submit"]');
+      if (agentQuestionButton) agentQuestionButton.disabled = isViewer;
+      const agentCreateButton = document.querySelector('#view-agent [onclick="agentCreateEvent()"]');
+      if (agentCreateButton) agentCreateButton.title = isViewer ? '仅值班员/管理员可生成工单' : '生成模块 2 看板工单';
+      const agentLogButton = document.querySelector('#view-agent [onclick="agentWriteShiftLog()"]');
+      if (agentLogButton) agentLogButton.title = isViewer ? '仅值班员/管理员可写入值班流水' : '写入模块 1 值班流水';
+
       // 7. 重新渲染受权限影响的动态列表（巡查卡槽打卡按钮、待办操作、看板推进按钮、导航删除图标、SOP复选框）
       renderPatrolSlots();
       renderTodos();
@@ -1774,6 +2057,7 @@
       renderKanban();
       renderNavCards();
       renderSop();
+      renderAgentWorkspace();
       renderUserAuditList();
     }
 
@@ -2091,6 +2375,74 @@
       }
     };
     let activeSopKey = "door";
+    let activeAgentId = "hydrogen";
+
+    const agentProfiles = {
+      hydrogen: {
+        name: "重水波动箱氢浓度监测 Agent",
+        version: "v2.4.1-hydrogen",
+        verdict: "当前打靶功率 200kW 稳定，氢浓度平滑上升至 3.8%，判定为真实物理产氢累积，排气通畅但需前置关注。",
+        verdictClass: "border-amber-500/40 bg-amber-950/20",
+        labelClass: "text-amber-300/80",
+        reason: "已排除工控机死机与气路欠压：心跳周期稳定在 4ms、驱动气压维持 0.45MPa，且 PV 数据无中断跳变；氢浓度呈平滑单调上升，符合真实物理产氢而非传感器或通讯故障。",
+        reference: "引用历史档案《2022-10-14 水冷系统排气记录》：同类打靶功率区间曾出现 3.5%~4.1% 的氢累积平台，通过在线排气与持续观察恢复至 2.6%。",
+        advice: "核实在线自动排气阀开位与反馈信号，确认排气通畅；保持打靶工况不变，持续观察 30 分钟氢浓度趋势与缓冲罐压力变化。",
+        redline: "氢浓度未降至 3.0% 以下严禁关闭排气。",
+        eventTitle: "重水波动箱氢浓度早期累积预警 (3.82%)",
+        eventDevice: "靶站重水波动箱 / 氢浓度监测",
+        eventNotes: "打靶功率 200kW 稳定，实测氢浓度平滑上升至 3.82%，缓冲罐压力 0.11MPa、驱动气压 0.45MPa，工控机心跳正常。Agent 判定为真实物理产氢累积；需核实在线自动排气阀开位并持续观察 30 分钟。安全红线：氢浓度未降至 3.0% 以下严禁关闭排气。",
+        logContent: "【智能 Agent 预警】重水波动箱氢浓度 3.82%，判定真实物理产氢累积；已核实自动排气阀开位并持续观察 30 分钟，氢浓度未降至 3.0% 以下严禁关闭排气。",
+        target: "靶站水冷回路"
+      },
+      water: {
+        name: "靶站水冷一次回路微漂移预警 Agent",
+        version: "v1.9.6-cooling",
+        verdict: "一次回路温差与流量基线保持稳定，当前未检出工艺侧或设备侧异常，处于正常监视状态。",
+        verdictClass: "border-emerald-500/40 bg-emerald-950/20",
+        labelClass: "text-emerald-300/80",
+        reason: "主循环泵压差、流量与回水温度均位于历史包络线内，未出现持续性单调漂移；数据链路完整，排除传感器漂移造成的误报。",
+        reference: "参考《2026 年靶站一次水冷回路运行基线》：同功率区间流量波动 ±2.1%，当前偏差处于正常范围。",
+        advice: "保持基线监视，按班次复核泵组振动与滤网压差；若连续 3 个采样周期超出包络线，再升级为预警工单。",
+        redline: "严禁在未确认备用泵自动联锁正常情况下手动停运主循环泵。",
+        eventTitle: "靶站水冷一次回路微漂移监视项复核",
+        eventDevice: "靶站一次水冷回路 / 主循环泵组",
+        eventNotes: "Agent 监视到一次回路流量出现短暂微漂移，已复核历史包络与泵组运行状态，当前判定为正常范围内波动，需按班次持续跟踪。",
+        logContent: "【智能 Agent 监视】靶站水冷一次回路微漂移项复核：流量与温差仍在历史包络范围内，泵组运行正常，继续按班次跟踪。",
+        target: "靶站水冷回路"
+      },
+      cryo: {
+        name: "低温样品环境换样防呆向导 Agent",
+        version: "v3.0.2-cryo",
+        verdict: "低温样品环境处于就绪待命状态，换样前置条件满足，等待值班员发起标准换样流程。",
+        verdictClass: "border-sky-500/40 bg-sky-950/20",
+        labelClass: "text-sky-300/80",
+        reason: "样品室真空度、LakeShore 温区与探测器高压均满足换样准入条件；未检测到人员滞留或联锁未复位状态。",
+        reference: "引用《SOP-02 谱仪实验重启 Run 前置门槛复核》与换样防呆检查单。",
+        advice: "按 SOP 依次确认真空、温区与高压门槛，双人复核后执行换样；如抽真空超过 20 分钟未达 50Pa，立即中止。",
+        redline: "抽真空超 20 分钟未达 50 Pa 严禁启动分子泵。",
+        eventTitle: "低温样品环境换样前置条件偏差复核",
+        eventDevice: "低温样品环境 CCR / LakeShore",
+        eventNotes: "Agent 换样防呆检查发现前置条件需人工复核，已生成跟踪工单；执行换样前须按 SOP-02 完成真空、温区与探测器高压双人复核。",
+        logContent: "【智能 Agent 向导】低温样品环境换样前置条件已复核，SOP-02 门槛满足，等待双人确认后执行换样。",
+        target: "低温样品环境 CCR"
+      },
+      patrol: {
+        name: "谱仪大厅多模态巡检 Agent",
+        version: "v1.7.4-vision",
+        verdict: "谱仪大厅声光、视频与设备状态多模态巡检结果正常，未发现人员违规或设备异常。",
+        verdictClass: "border-emerald-500/40 bg-emerald-950/20",
+        labelClass: "text-emerald-300/80",
+        reason: "多路视频画面与声光传感数据一致，未检出烟雾、漏水、异常振动或人员滞留；巡检轨迹完整无盲区。",
+        reference: "参考《靶站谱仪运行组例行巡查路线》历史巡检记录与视频抽帧比对结果。",
+        advice: "维持既有巡检节奏，下次例行巡查重点复核大厅机柜指示灯与管线密封状态。",
+        redline: "发现人员滞留或联锁异常时立即停止作业并上报值班长。",
+        eventTitle: "谱仪大厅多模态巡检异常复核",
+        eventDevice: "谱仪大厅 / 视频与声光传感",
+        eventNotes: "Agent 多模态巡检发现需人工确认的现场特征，已生成复核工单；请值班员按例行巡检路线现场核实并记录处置结论。",
+        logContent: "【智能 Agent 巡检】谱仪大厅多模态巡检完成：视频、声光与设备状态一致，未发现人员滞留或设备异常。",
+        target: "靶站综合大厅"
+      }
+    };
 
     // ==========================================
     // INITIALIZATION & TAB SWITCHING
@@ -2132,6 +2484,111 @@
         targetNav.classList.add('bg-sky-500/15', 'text-sky-400', 'border-sky-500/30');
         targetNav.classList.remove('text-slate-300', 'border-transparent');
       }
+
+      if (tabKey === 'agent') renderAgentWorkspace();
+    }
+
+    function renderAgentWorkspace() {
+      const profile = agentProfiles[activeAgentId];
+      if (!profile) return;
+
+      document.querySelectorAll('.agent-card').forEach(card => {
+        const isActive = card.getAttribute('data-agent-id') === activeAgentId;
+        card.className = isActive
+          ? "agent-card w-full text-left p-4 rounded-xl bg-slate-900 border border-amber-500/50 bg-amber-950/10 transition-all hover:border-amber-400/70"
+          : "agent-card w-full text-left p-4 rounded-xl bg-slate-900/60 border border-slate-800 hover:border-slate-700 transition-all";
+      });
+
+      setSafeText('agentWorkspaceTitle', profile.name);
+      setSafeText('agentVersionTag', profile.version);
+
+      const banner = document.getElementById('agentVerdictBanner');
+      if (banner) banner.className = `mt-4 rounded-xl border p-4 ${profile.verdictClass}`;
+      const verdictLabel = banner ? banner.querySelector('.uppercase') : null;
+      if (verdictLabel) verdictLabel.className = `text-[10px] uppercase tracking-wider font-bold ${profile.labelClass}`;
+      setSafeText('agentVerdictText', profile.verdict);
+
+      const diagnosisPanels = document.querySelectorAll('#agentDiagnosisFlow .rounded-lg');
+      if (diagnosisPanels.length >= 4) {
+        const values = [profile.reason, profile.reference, profile.advice, profile.redline];
+        diagnosisPanels.forEach((panel, index) => {
+          const paragraph = panel.querySelector('p');
+          if (paragraph) paragraph.textContent = values[index];
+        });
+      }
+    }
+
+    function selectAgent(agentId) {
+      if (!agentProfiles[agentId]) return;
+      activeAgentId = agentId;
+      renderAgentWorkspace();
+      const panel = document.getElementById('agentAnswerPanel');
+      if (panel) panel.classList.add('hidden');
+      showToast(`已切换至【${agentProfiles[agentId].name}】工作舱`);
+    }
+
+    async function agentCreateEvent() {
+      if (currentUser.role === 'viewer') return showToast('⚠️ 权限拦截：只读观察员无权生成看板工单');
+      const profile = agentProfiles[activeAgentId];
+      try {
+        const created = await apiRequest('/events', {
+          method: 'POST',
+          body: {
+            title: profile.eventTitle,
+            device: profile.eventDevice,
+            priority: activeAgentId === 'hydrogen' ? '重要' : '一般',
+            reporter_name: currentUser.name || '智能Agent中枢',
+            stage: 'pending',
+            notes: profile.eventNotes
+          }
+        });
+        await refreshAllData();
+        showToast(`Agent 已生成看板工单 [${created.id}]，已联动模块 2`);
+      } catch (error) {
+        showToast(`⚠️ ${error.message}`);
+      }
+    }
+
+    function agentOpenSop() {
+      switchTab('sop');
+      selectSopWorkflow(activeAgentId === 'cryo' ? 'run' : activeAgentId === 'hydrogen' || activeAgentId === 'water' ? 'patrol' : 'patrol');
+      showToast('已调阅规程向导，请核对排气/巡检前置条件');
+    }
+
+    async function agentWriteShiftLog() {
+      if (currentUser.role === 'viewer') return showToast('⚠️ 权限拦截：只读观察员无权录入值班流水');
+      const profile = agentProfiles[activeAgentId];
+      try {
+        await apiRequest('/shift-logs', {
+          method: 'POST',
+          body: {
+            category: '运行报警',
+            target: profile.target,
+            content: profile.logContent,
+            severity: activeAgentId === 'hydrogen' ? '重要' : '一般',
+            status: '跟进中',
+            author_name: currentUser.name || '智能Agent中枢'
+          }
+        });
+        await refreshAllData();
+        showToast('Agent 结论已记入本班值班流水，已联动模块 1');
+      } catch (error) {
+        showToast(`⚠️ ${error.message}`);
+      }
+    }
+
+    function handleAgentQuestion(event) {
+      event.preventDefault();
+      const input = document.getElementById('agentQuestionInput');
+      const question = input ? input.value.trim() : '';
+      if (!question) return showToast('请输入需要追问的问题');
+      const profile = agentProfiles[activeAgentId];
+      const panel = document.getElementById('agentAnswerPanel');
+      if (panel) {
+        panel.classList.remove('hidden');
+        panel.innerHTML = `<div class="flex items-start gap-2"><i class="ph ph-robot text-sky-400 text-base shrink-0 mt-0.5"></i><div><div class="text-[10px] text-sky-400/80 font-mono mb-1">${escapePdfText(profile.version)} · HEPAI AGENT</div><div>${escapePdfText(question)}<br><span class="text-slate-400 mt-1 inline-block">建议处置：${escapePdfText(profile.advice)}</span><br><span class="text-rose-300 font-semibold mt-1 inline-block">安全红线：${escapePdfText(profile.redline)}</span></div></div></div>`;
+      }
+      if (input) input.value = '';
     }
 
     // Toggle Day/Night Shift mode
@@ -4574,32 +5031,34 @@
       const rows = histories.length
         ? histories.map(item => `
           <tr>
-            <td style="border:1px solid #444; padding:6px 7px; text-align:center; width:15%;">${escapePdfText(item.stage)}</td>
-            <td style="border:1px solid #444; padding:6px 7px; text-align:center; width:13%;">${escapePdfText(item.operator)}</td>
-            <td style="border:1px solid #444; padding:6px 7px; text-align:center; width:16%; font-family:monospace; font-size:10px;">${escapePdfText(formatEventDateTime(item.acted_at || item.time))}</td>
-            <td style="border:1px solid #444; padding:6px 7px; word-break:break-all; width:56%;">${escapePdfText(item.note)}</td>
+            <td style="border:1px solid #444; padding:5px 6px; text-align:center;">${escapePdfText(item.stage)}</td>
+            <td style="border:1px solid #444; padding:5px 6px; text-align:center;">${escapePdfText(item.operator)}</td>
+            <td style="border:1px solid #444; padding:5px 6px; text-align:center; font-family:monospace; font-size:9.5px;">${escapePdfText(formatEventDateTime(item.acted_at || item.time))}</td>
+            <td style="border:1px solid #444; padding:5px 6px;">${escapePdfText(item.note)}</td>
           </tr>`).join('')
         : '<tr><td colspan="4" style="border:1px solid #444; padding:8px; text-align:center; color:#666;">暂无处置轨迹记录</td></tr>';
       return `
-        <div style="text-align:center; border-bottom:2px solid #111; padding-bottom:10px; margin-bottom:14px;">
+        <div class="pdf-document-header" style="text-align:center; border-bottom:2px solid #111; padding-bottom:10px; margin-bottom:14px;">
           <div style="font-size:18px; font-weight:bold; letter-spacing:0.5px;">中国散裂中子源 (CSNS)</div>
           <div style="font-size:15px; margin-top:4px;">运行事件处置与排故闭环归档单</div>
         </div>
-        <table style="width:100%; border-collapse:collapse; font-size:11px; margin-bottom:12px; table-layout:fixed;">
-          <tr><th style="border:1px solid #444; padding:5px 7px; background:#f2f2f2; width:17%; text-align:left;">工单号</th><td style="border:1px solid #444; padding:5px 7px; width:33%; font-family:monospace; font-weight:bold;">${escapePdfText(event.id)}</td><th style="border:1px solid #444; padding:5px 7px; background:#f2f2f2; width:17%; text-align:left;">严重级别</th><td style="border:1px solid #444; padding:5px 7px; width:33%;">${escapePdfText(event.priority)}</td></tr>
-          <tr><th style="border:1px solid #444; padding:5px 7px; background:#f2f2f2; text-align:left;">异常主题</th><td colspan="3" style="border:1px solid #444; padding:5px 7px; word-break:break-all;">${escapePdfText(event.title)}</td></tr>
-          <tr><th style="border:1px solid #444; padding:5px 7px; background:#f2f2f2; text-align:left;">涉及设备/谱仪</th><td style="border:1px solid #444; padding:5px 7px;">${escapePdfText(event.device)}</td><th style="border:1px solid #444; padding:5px 7px; background:#f2f2f2; text-align:left;">初始报告人</th><td style="border:1px solid #444; padding:5px 7px;">${escapePdfText(event.reporter)}</td></tr>
-          <tr><th style="border:1px solid #444; padding:5px 7px; background:#f2f2f2; text-align:left;">建单时间</th><td style="border:1px solid #444; padding:5px 7px; font-family:monospace; font-size:10px;">${escapePdfText(formatEventDateTime(event.created_at))}</td><th style="border:1px solid #444; padding:5px 7px; background:#f2f2f2; text-align:left;">闭环时间</th><td style="border:1px solid #444; padding:5px 7px; font-family:monospace; font-size:10px;">${escapePdfText(formatEventDateTime(event.closed_at))}</td></tr>
-          <tr><th style="border:1px solid #444; padding:5px 7px; background:#f2f2f2; text-align:left;">闭环责任人</th><td colspan="3" style="border:1px solid #444; padding:5px 7px;">${escapePdfText(event.closer || '--')}</td></tr>
+        <table style="width:100% !important; border-collapse:collapse; font-size:11px; margin-bottom:12px; table-layout:fixed !important;">
+          <colgroup><col style="width:18%;"><col style="width:32%;"><col style="width:18%;"><col style="width:32%;"></colgroup>
+          <tr><th style="border:1px solid #444; padding:5px 6px; background:#f2f2f2; text-align:left;">工单号</th><td style="border:1px solid #444; padding:5px 6px; font-family:monospace; font-weight:bold;">${escapePdfText(event.id)}</td><th style="border:1px solid #444; padding:5px 6px; background:#f2f2f2; text-align:left;">严重级别</th><td style="border:1px solid #444; padding:5px 6px;">${escapePdfText(event.priority)}</td></tr>
+          <tr><th style="border:1px solid #444; padding:5px 6px; background:#f2f2f2; text-align:left;">异常主题</th><td colspan="3" style="border:1px solid #444; padding:5px 6px;">${escapePdfText(event.title)}</td></tr>
+          <tr><th style="border:1px solid #444; padding:5px 6px; background:#f2f2f2; text-align:left;">涉及设备/谱仪</th><td style="border:1px solid #444; padding:5px 6px;">${escapePdfText(event.device)}</td><th style="border:1px solid #444; padding:5px 6px; background:#f2f2f2; text-align:left;">初始报告人</th><td style="border:1px solid #444; padding:5px 6px;">${escapePdfText(event.reporter)}</td></tr>
+          <tr><th style="border:1px solid #444; padding:5px 6px; background:#f2f2f2; text-align:left;">建单时间</th><td style="border:1px solid #444; padding:5px 6px; font-family:monospace; font-size:9.5px;">${escapePdfText(formatEventDateTime(event.created_at))}</td><th style="border:1px solid #444; padding:5px 6px; background:#f2f2f2; text-align:left;">闭环时间</th><td style="border:1px solid #444; padding:5px 6px; font-family:monospace; font-size:9.5px;">${escapePdfText(formatEventDateTime(event.closed_at))}</td></tr>
+          <tr><th style="border:1px solid #444; padding:5px 6px; background:#f2f2f2; text-align:left;">闭环责任人</th><td colspan="3" style="border:1px solid #444; padding:5px 6px;">${escapePdfText(event.closer || '--')}</td></tr>
         </table>
-        <div style="font-size:12px; font-weight:bold; margin:12px 0 6px;">一、初始现场现象与报警描述</div>
+        <div class="pdf-section-title" style="font-size:12px; font-weight:bold; margin:12px 0 6px;">一、初始现场现象与报警描述</div>
         <div style="border:1px solid #444; min-height:54px; padding:7px 9px; font-size:11px; line-height:1.7; word-break:break-all;">${escapePdfText(event.notes)}</div>
-        <div style="font-size:12px; font-weight:bold; margin:14px 0 6px;">二、全流程处置轨迹时序表</div>
-        <table style="width:100%; border-collapse:collapse; font-size:10.5px; table-layout:fixed;">
-          <thead><tr style="background:#f2f2f2;"><th style="border:1px solid #444; padding:6px 7px;">推进阶段</th><th style="border:1px solid #444; padding:6px 7px;">记录人/复核人</th><th style="border:1px solid #444; padding:6px 7px;">时间戳</th><th style="border:1px solid #444; padding:6px 7px;">详细处置动作与排查说明</th></tr></thead>
+        <div class="pdf-section-title" style="font-size:12px; font-weight:bold; margin:14px 0 6px;">二、全流程处置轨迹时序表</div>
+        <table style="width:100% !important; border-collapse:collapse; font-size:10px; table-layout:fixed !important;">
+          <colgroup><col style="width:18%;"><col style="width:20%;"><col style="width:24%;"><col style="width:38%;"></colgroup>
+          <thead><tr style="background:#f2f2f2;"><th style="border:1px solid #444; padding:5px 6px; width:18%;">推进阶段</th><th style="border:1px solid #444; padding:5px 6px; width:20%;">记录人/复核人</th><th style="border:1px solid #444; padding:5px 6px; width:24%;">时间戳</th><th style="border:1px solid #444; padding:5px 6px; width:38%;">详细处置动作与排查说明</th></tr></thead>
           <tbody>${rows}</tbody>
         </table>
-        <div style="margin-top:18px; border:1.5px solid #111; padding:8px 10px; font-size:9.5px; color:#333; line-height:1.6;">
+        <div class="pdf-audit-footer" style="margin-top:18px; border:1.5px solid #111; padding:8px 10px; font-size:9.5px; color:#333; line-height:1.6;">
           <div><strong>防伪审计戳 (SHA-256)：</strong> <span style="font-family:monospace; word-break:break-all;">${escapePdfText(auditHash)}</span></div>
           <div style="margin-top:3px;"><strong>导出时间：</strong>${escapePdfText(exportedAt)}　　归档人：${escapePdfText(currentUser.name || '')}</div>
         </div>`;
@@ -4616,15 +5075,27 @@
         element.innerHTML = buildEventArchiveHtml(event, auditHash, exportedAt);
         const wrapper = document.getElementById('eventPdfPrintWrapper');
         wrapper.style.display = 'block';
+        element.scrollTop = 0;
         showToast(`正在生成 [${event.id}] 独立闭环归档单...`);
-        await html2pdf().set({
-          margin: [10, 10, 10, 10],
+        const opt = {
+          margin: [8, 8, 8, 8],
           filename: `CSNS_运行事件闭环归档单_${event.id}.pdf`,
           image: { type: 'jpeg', quality: 0.98 },
-          html2canvas: { scale: 2, useCORS: true, backgroundColor: '#ffffff', scrollX: 0, scrollY: 0 },
+          html2canvas: {
+            scale: 2,
+            useCORS: true,
+            letterRendering: true,
+            width: 750,
+            windowWidth: 750,
+            scrollX: 0,
+            scrollY: 0,
+            x: 0,
+            backgroundColor: '#ffffff'
+          },
           jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
           pagebreak: { mode: ['css', 'legacy'], avoid: ['.pdf-avoid-break', 'tr'] }
-        }).from(element).save();
+        };
+        await html2pdf().set(opt).from(element).save();
         wrapper.style.display = 'none';
         showToast(`闭环归档单 [${event.id}] 已生成`);
       } catch (error) {
@@ -4668,7 +5139,7 @@
       const counts = { 紧急: 0, 重要: 0, 一般: 0 };
       events.forEach(item => { if (counts[item.priority] !== undefined) counts[item.priority]++; });
       const cards = events.map(event => `
-        <div style="border:1px solid #777; margin-bottom:8px; padding:7px 9px; page-break-inside:avoid; font-size:10.5px;">
+        <div class="pdf-avoid-break" style="border:1px solid #777; margin-bottom:8px; padding:7px 9px; font-size:10.5px;">
           <div style="display:flex; justify-content:space-between; gap:8px; border-bottom:1px solid #ddd; padding-bottom:4px; margin-bottom:4px;">
             <strong style="font-family:monospace;">${escapePdfText(event.id)}</strong>
             <span>${escapePdfText(event.priority)}　闭环：${escapePdfText(formatEventDateTime(event.closed_at))}</span>
@@ -4678,17 +5149,18 @@
           <div style="margin-top:3px; line-height:1.55; word-break:break-all;"><strong>处置结论：</strong>${escapePdfText((event.history && event.history.length) ? event.history[event.history.length - 1].note : event.notes)}</div>
         </div>`).join('');
       return `
-        <div style="text-align:center; border-bottom:2px solid #111; padding-bottom:10px; margin-bottom:13px;">
+        <div class="pdf-document-header" style="text-align:center; border-bottom:2px solid #111; padding-bottom:10px; margin-bottom:13px;">
           <div style="font-size:18px; font-weight:bold;">中国散裂中子源 (CSNS)</div>
           <div style="font-size:15px; margin-top:4px;">运行事件处置闭环汇总台账</div>
         </div>
-        <table style="width:100%; border-collapse:collapse; font-size:10.5px; margin-bottom:11px; table-layout:fixed;">
-          <tr><th style="border:1px solid #444; background:#f2f2f2; padding:5px 7px; text-align:left; width:16%;">统计时间范围</th><td style="border:1px solid #444; padding:5px 7px; font-family:monospace; font-size:9.5px;">${escapePdfText(startAt)} ~ ${escapePdfText(endAt)}</td><th style="border:1px solid #444; background:#f2f2f2; padding:5px 7px; text-align:left; width:13%;">闭环总数</th><td style="border:1px solid #444; padding:5px 7px; font-weight:bold;">${events.length} 单</td></tr>
-          <tr><th style="border:1px solid #444; background:#f2f2f2; padding:5px 7px; text-align:left;">严重级别分布</th><td colspan="3" style="border:1px solid #444; padding:5px 7px;">紧急：${counts.紧急}　重要：${counts.重要}　一般：${counts.一般}</td></tr>
+        <table style="width:100% !important; border-collapse:collapse; font-size:10.5px; margin-bottom:11px; table-layout:fixed !important;">
+          <colgroup><col style="width:16%;"><col style="width:52%;"><col style="width:13%;"><col style="width:19%;"></colgroup>
+          <tr><th style="border:1px solid #444; background:#f2f2f2; padding:5px 6px; text-align:left;">统计时间范围</th><td style="border:1px solid #444; padding:5px 6px; font-family:monospace; font-size:9.5px;">${escapePdfText(startAt)} ~ ${escapePdfText(endAt)}</td><th style="border:1px solid #444; background:#f2f2f2; padding:5px 6px; text-align:left;">闭环总数</th><td style="border:1px solid #444; padding:5px 6px; font-weight:bold;">${events.length} 单</td></tr>
+          <tr><th style="border:1px solid #444; background:#f2f2f2; padding:5px 6px; text-align:left;">严重级别分布</th><td colspan="3" style="border:1px solid #444; padding:5px 6px;">紧急：${counts.紧急}　重要：${counts.重要}　一般：${counts.一般}</td></tr>
         </table>
-        <div style="font-size:12px; font-weight:bold; margin:10px 0 6px;">一、闭环事件汇总明细 (按闭环时间倒序)</div>
+        <div class="pdf-section-title" style="font-size:12px; font-weight:bold; margin:10px 0 6px;">一、闭环事件汇总明细 (按闭环时间倒序)</div>
         ${cards || '<div style="border:1px solid #777; padding:12px; text-align:center; color:#666;">所选时间范围内没有闭环事件</div>'}
-        <div style="margin-top:16px; border:1.5px solid #111; padding:8px 10px; font-size:9.5px; color:#333; line-height:1.6;">
+        <div class="pdf-audit-footer" style="margin-top:16px; border:1.5px solid #111; padding:8px 10px; font-size:9.5px; color:#333; line-height:1.6;">
           <div><strong>管理员签章：</strong>____________________　　导出人：${escapePdfText(currentUser.name || '')}　　导出时间：${escapePdfText(exportedAt)}</div>
           <div style="margin-top:3px;"><strong>防伪审计戳 (SHA-256)：</strong><span style="font-family:monospace; word-break:break-all;">${escapePdfText(auditHash)}</span></div>
         </div>`;
@@ -4716,14 +5188,27 @@
         document.getElementById('printableEventArchive').innerHTML = buildBatchArchiveHtml(events, startValue.replace('T', ' '), endValue.replace('T', ' '), auditHash, exportedAt);
         const wrapper = document.getElementById('eventPdfPrintWrapper');
         wrapper.style.display = 'block';
-        await html2pdf().set({
-          margin: [10, 10, 10, 10],
+        const element = document.getElementById('printableEventArchive');
+        element.scrollTop = 0;
+        const opt = {
+          margin: [8, 8, 8, 8],
           filename: `CSNS_运行事件闭环汇总台账_${startValue.substring(0, 10)}_${endValue.substring(0, 10)}.pdf`,
           image: { type: 'jpeg', quality: 0.98 },
-          html2canvas: { scale: 2, useCORS: true, backgroundColor: '#ffffff', scrollX: 0, scrollY: 0 },
+          html2canvas: {
+            scale: 2,
+            useCORS: true,
+            letterRendering: true,
+            width: 750,
+            windowWidth: 750,
+            scrollX: 0,
+            scrollY: 0,
+            x: 0,
+            backgroundColor: '#ffffff'
+          },
           jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
           pagebreak: { mode: ['css', 'legacy'], avoid: ['.pdf-avoid-break', 'tr'] }
-        }).from(document.getElementById('printableEventArchive')).save();
+        };
+        await html2pdf().set(opt).from(element).save();
         wrapper.style.display = 'none';
         closeEventBatchExportModal();
         showToast(`闭环汇总台账已导出，共 ${events.length} 单`);
