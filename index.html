@@ -111,6 +111,111 @@
       page-break-inside: avoid;
       break-inside: avoid;
     }
+    #view-agent:not(.hidden) {
+      display: flex;
+    }
+    #mainContainer.agent-mode {
+      padding-top: 0.5rem;
+      padding-bottom: 0.5rem;
+      overflow: hidden !important;
+    }
+    #view-agent {
+      background-color: #090d16;
+      background-image: linear-gradient(to right, rgba(255, 255, 255, 0.02) 1px, transparent 1px),
+                        linear-gradient(to bottom, rgba(255, 255, 255, 0.02) 1px, transparent 1px);
+      background-size: 24px 24px;
+    }
+    .agent-card {
+      position: relative;
+      background-image: linear-gradient(135deg, rgba(22, 34, 56, 0.55), transparent 64%);
+      transition: border-color 180ms ease, background-color 180ms ease, box-shadow 180ms ease, transform 180ms ease;
+    }
+    .excel-table th {
+      background-color: #2e5936;
+      color: #f0fdf4;
+      font-weight: 600;
+      letter-spacing: 0.02em;
+      border-right: 1px solid rgba(255, 255, 255, 0.15);
+      border-bottom: 2px solid #1c3b22;
+      user-select: none;
+    }
+    .excel-table td {
+      border-right: 1px solid #1e293b;
+      border-bottom: 1px solid #1a253a;
+    }
+    .excel-table tbody tr:hover td {
+      background-color: rgba(56, 189, 248, 0.05);
+    }
+    .agent-card:hover {
+      border-color: rgba(56, 189, 248, 0.4) !important;
+      box-shadow: 0 0 18px rgba(14, 165, 233, 0.12);
+      transform: translateY(-1px);
+    }
+    .agent-card.agent-card-active {
+      border-color: rgba(56, 189, 248, 0.55) !important;
+      background-image: linear-gradient(135deg, rgba(2, 132, 199, 0.18), rgba(14, 22, 38, 0.22) 70%);
+      box-shadow: 0 0 0 1px rgba(56, 189, 248, 0.08), 0 0 22px rgba(14, 165, 233, 0.16);
+    }
+    .agent-card.agent-card-warn.agent-card-active {
+      border-color: rgba(245, 158, 11, 0.6) !important;
+      background-image: linear-gradient(135deg, rgba(120, 53, 15, 0.32), rgba(14, 22, 38, 0.2) 72%);
+      box-shadow: 0 0 0 1px rgba(245, 158, 11, 0.08), 0 0 22px rgba(245, 158, 11, 0.2);
+    }
+    .agent-card.agent-card-active::after {
+      content: '';
+      position: absolute;
+      right: 0;
+      top: 20%;
+      bottom: 20%;
+      width: 2px;
+      border-radius: 999px;
+      background: #38bdf8;
+      box-shadow: 0 0 8px rgba(56, 189, 248, 0.8);
+    }
+    .agent-card.agent-card-warn.agent-card-active::after {
+      background: #f59e0b;
+      box-shadow: 0 0 8px rgba(245, 158, 11, 0.85);
+    }
+    @keyframes agentVerdictPulse {
+      0%, 100% { box-shadow: 0 0 0 1px rgba(245, 158, 11, 0.04), 0 0 12px rgba(245, 158, 11, 0.06); }
+      50% { box-shadow: 0 0 0 1px rgba(245, 158, 11, 0.18), 0 0 24px rgba(245, 158, 11, 0.17); }
+    }
+    .agent-verdict-pulse {
+      animation: agentVerdictPulse 3.2s ease-in-out infinite;
+    }
+    .agent-diagnostic-card {
+      cursor: pointer;
+      transition: border-color 160ms ease, background-color 160ms ease, transform 160ms ease;
+    }
+    .agent-diagnostic-card:hover {
+      border-color: rgba(56, 189, 248, 0.35) !important;
+      background-color: rgba(2, 132, 199, 0.06);
+    }
+    .agent-diagnostic-card .ph-caret-down {
+      transition: transform 160ms ease;
+    }
+    .agent-diagnostic-card.agent-card-collapsed .agent-diagnostic-body {
+      display: none;
+    }
+    .agent-diagnostic-card.agent-card-collapsed .ph-caret-down {
+      transform: rotate(-90deg);
+    }
+    @keyframes agentWorkspaceIn {
+      from { opacity: 0.35; transform: translateY(4px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    .agent-workspace-enter {
+      animation: agentWorkspaceIn 180ms ease-out;
+    }
+    .agent-typing-caret::after {
+      content: '▍';
+      margin-left: 2px;
+      color: #38bdf8;
+      animation: agentCaretBlink 0.9s steps(1) infinite;
+    }
+    @keyframes agentCaretBlink {
+      50% { opacity: 0; }
+    }
   </style>
 </head>
 <body class="bg-[#090d16] text-slate-100 min-h-screen flex flex-col antialiased selection:bg-sky-500 selection:text-white">
@@ -224,19 +329,26 @@
           <span id="badge-event-count" class="ml-auto bg-slate-800 text-slate-300 text-[10px] font-mono px-1.5 py-0.5 rounded hidden md:inline">5起</span>
         </button>
 
-        <!-- Tab 3: 谱仪与系统一键导航 -->
+        <!-- Tab 3: 谱仪协助工作台账 -->
+        <button onclick="switchTab('assist')" id="nav-assist" class="nav-btn w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-slate-300 hover:text-white hover:bg-slate-800/60 transition-all duration-150 border border-transparent">
+          <i class="ph ph-table text-xl shrink-0"></i>
+          <span class="hidden md:inline truncate">谱仪协助工作台账</span>
+          <span id="navAssistTotalBadge" class="ml-auto bg-emerald-500/15 text-emerald-300 text-[10px] font-mono px-1.5 py-0.5 rounded border border-emerald-500/30 hidden md:inline">0条</span>
+        </button>
+
+        <!-- Tab 4: 谱仪与系统一键导航 -->
         <button onclick="switchTab('navigation')" id="nav-navigation" class="nav-btn w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-slate-300 hover:text-white hover:bg-slate-800/60 transition-all duration-150 border border-transparent">
           <i class="ph ph-compass-tool text-xl shrink-0"></i>
           <span class="hidden md:inline truncate">界面与系统导航</span>
         </button>
 
-        <!-- Tab 4: 谱仪协助作业与SOP -->
+        <!-- Tab 5: 谱仪协助作业与SOP -->
         <button onclick="switchTab('sop')" id="nav-sop" class="nav-btn w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-slate-300 hover:text-white hover:bg-slate-800/60 transition-all duration-150 border border-transparent">
           <i class="ph ph-shield-check text-xl shrink-0"></i>
           <span class="hidden md:inline truncate">谱仪协作与SOP向导</span>
         </button>
 
-        <!-- Tab 5: 智能 Agent 诊断中枢 -->
+        <!-- Tab 6: 智能 Agent 诊断中枢 -->
         <button onclick="switchTab('agent')" id="nav-agent" class="nav-btn w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-slate-300 hover:text-white hover:bg-slate-800/60 transition-all duration-150 border border-transparent">
           <i class="ph ph-cpu text-xl shrink-0"></i>
           <span class="hidden md:inline truncate">智能Agent中枢</span>
@@ -660,7 +772,148 @@
       </section>
 
       <!-- ======================================================== -->
-      <!-- MODULE 3: 谱仪与系统一键导航 (SPECTROMETER & MONITOR NAV) -->
+      <!-- MODULE 3: 谱仪协助工作台账 (SPECTROMETER ASSISTANCE LOG) -->
+      <!-- ======================================================== -->
+      <section id="view-assist" class="tab-view hidden space-y-4">
+
+        <!-- Top Stats Cards -->
+        <div class="grid grid-cols-2 lg:grid-cols-4 gap-3">
+          <div class="bg-[#0e1626] border border-slate-800 rounded-xl p-3.5 flex items-center justify-between shadow-sm">
+            <div>
+              <span class="text-xs text-slate-400 font-medium block">累计协助总记录</span>
+              <div class="flex items-baseline gap-2 mt-1">
+                <span class="text-2xl font-bold font-mono text-white" id="statTotalCount">0</span>
+                <span class="text-xs text-emerald-400 font-mono">项次已归档</span>
+              </div>
+            </div>
+            <div class="w-10 h-10 rounded-lg bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 flex items-center justify-center text-xl shrink-0">
+              <i class="ph ph-receipt"></i>
+            </div>
+          </div>
+
+          <div class="bg-[#0e1626] border border-slate-800 rounded-xl p-3.5 flex items-center justify-between shadow-sm">
+            <div>
+              <span class="text-xs text-slate-400 font-medium block">谱仪低温换样 (CCR)</span>
+              <div class="flex items-baseline gap-2 mt-1">
+                <span class="text-2xl font-bold font-mono text-cyan-400" id="statSampleCount">0</span>
+                <span class="text-xs text-slate-500 font-mono">GPPD / 高压谱仪</span>
+              </div>
+            </div>
+            <div class="w-10 h-10 rounded-lg bg-cyan-500/10 text-cyan-400 border border-cyan-500/30 flex items-center justify-center text-xl shrink-0">
+              <i class="ph ph-flask"></i>
+            </div>
+          </div>
+
+          <div class="bg-[#0e1626] border border-slate-800 rounded-xl p-3.5 flex items-center justify-between shadow-sm">
+            <div>
+              <span class="text-xs text-slate-400 font-medium block">大气中子谱仪协助</span>
+              <div class="flex items-baseline gap-2 mt-1">
+                <span class="text-2xl font-bold font-mono text-amber-400" id="statAnisCount">0</span>
+                <span class="text-xs text-slate-500 font-mono">屏蔽门 / 准直工况</span>
+              </div>
+            </div>
+            <div class="w-10 h-10 rounded-lg bg-amber-500/10 text-amber-300 border border-amber-500/30 flex items-center justify-center text-xl shrink-0">
+              <i class="ph ph-crosshair"></i>
+            </div>
+          </div>
+
+          <div class="bg-[#0e1626] border border-slate-800 rounded-xl p-3.5 flex items-center justify-between shadow-sm">
+            <div>
+              <span class="text-xs text-slate-400 font-medium block">其它支撑协助</span>
+              <div class="flex items-baseline gap-2 mt-1">
+                <span class="text-2xl font-bold font-mono text-purple-400" id="statOtherCount">0</span>
+                <span class="text-xs text-slate-500 font-mono">起Run / 泵组 / 水系统</span>
+              </div>
+            </div>
+            <div class="w-10 h-10 rounded-lg bg-purple-500/10 text-purple-400 border border-purple-500/30 flex items-center justify-center text-xl shrink-0">
+              <i class="ph ph-wrench"></i>
+            </div>
+          </div>
+        </div>
+
+        <!-- Main Panel -->
+        <div class="bg-[#0e1626] border border-slate-800 rounded-xl shadow-xl overflow-hidden flex flex-col">
+          <div class="p-3 md:p-4 bg-slate-900/90 border-b border-slate-800 flex flex-col lg:flex-row lg:items-center justify-between gap-3">
+            <div class="flex items-center gap-1.5 overflow-x-auto pb-1 lg:pb-0" id="assistTabsContainer"></div>
+
+            <div class="flex flex-wrap items-center gap-2">
+              <select id="filterShiftSelect" onchange="renderAssistTable()" class="bg-slate-950 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-slate-300 focus:outline-none focus:border-emerald-500">
+                <option value="all">全部班次 (白/夜班)</option>
+                <option value="白班">仅看 白班</option>
+                <option value="夜班">仅看 夜班</option>
+              </select>
+
+              <div class="relative">
+                <i class="ph ph-magnifying-glass absolute left-2.5 top-2 text-slate-500 text-xs"></i>
+                <input type="text" id="filterKeyword" oninput="renderAssistTable()" placeholder="搜索操作/谱仪/操作人..." class="w-40 sm:w-48 bg-slate-950 border border-slate-700 rounded-lg pl-7 pr-2.5 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-emerald-500">
+              </div>
+
+              <button id="btnExportAssist" onclick="exportAssistCSV()" class="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs font-medium flex items-center gap-1.5 transition-colors" title="导出当前筛选结果为 Excel / CSV">
+                <i class="ph ph-export text-emerald-400"></i>
+                <span class="hidden sm:inline">导出表格</span>
+              </button>
+
+              <button id="btnOpenAddAssist" onclick="openAddAssistModal()" class="px-3.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold flex items-center gap-1.5 shadow-md shadow-emerald-600/30 transition-all disabled:opacity-45 disabled:cursor-not-allowed">
+                <i class="ph ph-plus-circle font-bold text-sm"></i>
+                <span>登记新协助</span>
+              </button>
+            </div>
+          </div>
+
+          <div class="px-4 py-2 bg-[#122216]/60 border-b border-emerald-900/40 text-xs text-emerald-300/90 flex items-center justify-between gap-2">
+            <span class="flex items-center gap-2 min-w-0">
+              <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 shrink-0"></span>
+              <span id="subTabDescText" class="truncate">显示全部谱仪协助工作台账明细，数据支持向下依次录入累加。</span>
+            </span>
+            <span class="text-[11px] text-slate-400 font-mono shrink-0" id="subTabCountInfo">匹配 0 条记录</span>
+          </div>
+
+          <div class="overflow-x-auto max-h-[calc(100vh-22rem)] min-h-[320px] overflow-y-auto">
+            <table class="excel-table w-full text-left border-collapse text-xs">
+              <thead class="sticky top-0 z-20 shadow-sm">
+                <tr>
+                  <th class="py-2.5 px-3 text-center w-14">序号</th>
+                  <th class="py-2.5 px-4 min-w-[220px]">操作内容</th>
+                  <th class="py-2.5 px-3 w-32 min-w-[120px]">所属谱仪/系统</th>
+                  <th class="py-2.5 px-3 text-center w-20">白/夜班</th>
+                  <th class="py-2.5 px-3 text-center w-16">次数</th>
+                  <th onclick="toggleDateSort()" class="py-2 px-3 text-center w-36 cursor-pointer hover:bg-[#386741] transition-all select-none group" title="点击切换：降序 (最新在前) ➔ 升序 (最早在前) ➔ 默认顺序">
+                    <div class="inline-flex items-center justify-center gap-1.5 w-full">
+                      <span class="group-hover:text-emerald-200 transition-colors">操作时间</span>
+                      <span id="dateSortIconWrapper" class="inline-flex items-center p-0.5 rounded bg-emerald-950/70 border border-emerald-500/40 text-emerald-300 group-hover:border-emerald-300 group-hover:scale-105 transition-all">
+                        <i id="dateSortIcon" class="ph ph-arrows-down-up text-xs font-bold"></i>
+                      </span>
+                      <span id="dateSortBadge" class="text-[10px] font-mono px-1 rounded bg-black/40 text-emerald-300/80">默认</span>
+                    </div>
+                  </th>
+                  <th class="py-2.5 px-4 w-36 min-w-[130px]">操作人</th>
+                  <th class="py-2.5 px-4 min-w-[140px]">备注</th>
+                  <th class="py-2.5 px-2 text-center w-16 bg-[#264a2d] text-emerald-100">操作</th>
+                </tr>
+              </thead>
+              <tbody id="assistTableBody" class="divide-y divide-slate-800/80 font-sans">
+                <tr>
+                  <td colspan="9" class="py-12 text-center text-slate-500">
+                    <i class="ph ph-spinner ph-spin text-2xl block mb-2 opacity-50"></i>
+                    正在加载协助台账...
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="p-3 bg-slate-900/80 border-t border-slate-800 flex items-center justify-between gap-2 text-xs text-slate-400">
+            <div class="flex items-center gap-2 min-w-0">
+              <span class="w-2 h-2 rounded-full bg-emerald-400 shrink-0"></span>
+              <span class="truncate">数据表格已按原稿自增规范排列，管理员可在右侧操作区删除记录。</span>
+            </div>
+            <div class="font-mono text-[11px] text-slate-400 shrink-0 hidden sm:block">数据源: CSNS-Target-Spec-Ops-Assists · SQLite</div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ======================================================== -->
+      <!-- MODULE 4: 谱仪与系统一键导航 (SPECTROMETER & MONITOR NAV) -->
       <!-- ======================================================== -->
       <section id="view-navigation" class="tab-view hidden space-y-6">
         
@@ -702,7 +955,7 @@
       </section>
 
       <!-- ======================================================== -->
-      <!-- MODULE 4: 谱仪协助作业与 SOP 互动向导 (CHECKLIST & SOP) -->
+      <!-- MODULE 5: 谱仪协助作业与 SOP 互动向导 (CHECKLIST & SOP) -->
       <!-- ======================================================== -->
       <section id="view-sop" class="tab-view hidden space-y-6">
         
@@ -810,246 +1063,450 @@
       </section>
 
       <!-- ======================================================== -->
-      <!-- MODULE 5: 智能 Agent 诊断中枢 (AI AGENT HUB) -->
       <!-- ======================================================== -->
-      <section id="view-agent" class="tab-view hidden space-y-6">
-        <div class="bg-[#0e1626] border border-slate-800 rounded-xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-          <div class="flex items-center gap-3">
-            <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-sky-600/30 to-cyan-400/10 border border-sky-500/40 flex items-center justify-center text-sky-300 shadow-lg shadow-sky-500/10">
-              <i class="ph ph-cpu text-2xl"></i>
+      <!-- MODULE 6: 智能 Agent 诊断中枢 (AI AGENT HUB) -->
+      <!-- ======================================================== -->
+      <section id="view-agent" class="tab-view hidden h-[calc(100vh-6rem)] flex-col overflow-hidden bg-[#090d16]">
+        <div class="h-16 shrink-0 bg-[#162238] border border-slate-800 rounded-xl px-4 mb-3 flex items-center justify-between gap-3 shadow-lg shadow-black/30">
+          <div class="flex items-center gap-3 min-w-0">
+            <div class="w-9 h-9 rounded-lg bg-gradient-to-tr from-sky-600/30 to-cyan-400/10 border border-sky-500/40 flex items-center justify-center text-sky-300 shadow-lg shadow-sky-500/20 shrink-0">
+              <i class="ph ph-cpu text-xl"></i>
             </div>
-            <div>
-              <div class="flex items-center gap-2">
-                <h2 class="text-base font-bold text-white">智能 Agent 诊断中枢</h2>
-                <span class="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-500/10 text-emerald-300 border border-emerald-500/30">HEPAI · ONLINE</span>
+            <div class="min-w-0">
+              <div class="flex flex-wrap items-center gap-2">
+                <h2 class="text-sm font-bold text-white tracking-wide">中国散裂中子源 · 专业物理智能体集群</h2>
+                <span class="px-2 py-0.5 rounded text-[9px] font-bold font-mono tracking-wider bg-sky-500/10 text-sky-300 border border-sky-500/30">物理机理 + 大模型双核协同</span>
               </div>
-              <p class="text-xs text-slate-400 mt-0.5">面向靶站水冷、低温样品环境与谱仪大厅的多 Agent 实时感知、机理归因与闭环处置中枢</p>
+              <p class="text-[10px] text-slate-500 truncate mt-0.5">全时段多源遥测在线伴随诊断 · 虚假报警瞬态拦截 · 早期微弱渐变前瞻预警 · 联动闭环工单派发</p>
             </div>
           </div>
-          <div class="flex items-center gap-2 text-[10px] font-mono text-slate-400">
-            <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
-            <span>AGENT MESH HEALTHY · 4 NODES</span>
+          <div class="flex items-center gap-3 shrink-0">
+            <div class="hidden lg:flex items-center gap-2 px-3 py-1.5 rounded-lg bg-slate-950/70 border border-slate-800 font-mono text-[9px] text-slate-400">
+              <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+              HEPAI · ONLINE
+            </div>
+            <div class="bg-slate-950/70 border border-slate-800 px-3 py-1.5 rounded-xl flex items-center gap-3 text-xs">
+              <div>
+                <span class="text-slate-500 block text-[9px]">在席 Agent</span>
+                <strong id="agentTotalCount" class="font-mono text-white text-sm">4</strong>
+              </div>
+              <div class="w-px h-6 bg-slate-800"></div>
+              <div>
+                <span class="text-slate-500 block text-[9px]">当前告警</span>
+                <strong class="font-mono text-amber-400 text-sm">1 个</strong>
+              </div>
+              <div class="w-px h-6 bg-slate-800"></div>
+              <div class="hidden sm:block">
+                <span class="text-slate-500 block text-[9px]">机理校验覆盖率</span>
+                <strong class="font-mono text-emerald-400 text-sm">98.2%</strong>
+              </div>
+            </div>
           </div>
         </div>
 
-        <div class="grid grid-cols-1 xl:grid-cols-12 gap-6">
-          <!-- LEFT: Agent Cluster -->
-          <aside class="xl:col-span-4 space-y-4">
-            <div class="bg-[#0e1626] border border-slate-800 rounded-xl p-4">
-              <div class="flex items-center justify-between">
-                <div>
-                  <div class="text-xs font-bold text-white">Agent 集群状态</div>
-                  <div class="text-[10px] text-slate-500 mt-0.5">实时推理与感知节点总览</div>
+        <div class="flex-1 min-h-0 grid grid-cols-1 xl:grid-cols-12 gap-4 overflow-y-auto xl:overflow-hidden">
+          <!-- LEFT COLUMN: AGENT CATALOG & MATRIX -->
+          <aside class="xl:col-span-4 min-h-0 h-[210px] xl:h-full rounded-xl bg-[#162238] border border-slate-800 flex flex-col overflow-hidden shadow-xl shadow-black/20">
+            <div class="shrink-0 px-4 pt-4 pb-3 border-b border-slate-800/80">
+              <div class="flex items-center justify-between gap-2">
+                <div class="min-w-0">
+                  <div class="text-[10px] font-mono uppercase tracking-[0.18em] text-slate-500">Agent Fleet</div>
+                  <div class="text-xs font-bold text-white mt-1 flex items-center gap-1.5">
+                    <i class="ph ph-squares-four text-sky-400 text-sm"></i>
+                    专科 Agent 矩阵目录
+                  </div>
                 </div>
-                <i class="ph ph-pulse text-emerald-400 text-xl"></i>
+                <div class="w-8 h-8 rounded-lg bg-slate-950/70 border border-slate-800 flex items-center justify-center text-emerald-400 shrink-0">
+                  <i class="ph ph-pulse text-lg"></i>
+                </div>
               </div>
               <div class="grid grid-cols-2 gap-2 mt-3">
-                <div class="rounded-lg bg-emerald-950/25 border border-emerald-800/40 px-3 py-2">
-                  <div class="text-[10px] text-emerald-300/80">运行中</div>
-                  <div class="text-xl font-mono font-bold text-emerald-300">3</div>
+                <div class="rounded-lg bg-emerald-950/20 border border-emerald-800/40 px-3 py-2">
+                  <div class="flex items-center gap-1.5 text-[9px] text-emerald-300/80"><span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>运行中</div>
+                  <div class="text-xl font-mono font-bold text-emerald-300 leading-tight">3</div>
                 </div>
-                <div class="rounded-lg bg-amber-950/25 border border-amber-700/40 px-3 py-2">
-                  <div class="text-[10px] text-amber-300/80">预警</div>
-                  <div class="text-xl font-mono font-bold text-amber-300">1</div>
+                <div class="rounded-lg bg-amber-950/20 border border-amber-700/40 px-3 py-2">
+                  <div class="flex items-center gap-1.5 text-[9px] text-amber-300/80"><span class="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse"></span>预警</div>
+                  <div class="text-xl font-mono font-bold text-amber-300 leading-tight">1</div>
                 </div>
               </div>
             </div>
 
-            <div class="space-y-3" id="agentClusterList">
-              <button type="button" onclick="selectAgent('hydrogen')" data-agent-id="hydrogen" class="agent-card w-full text-left p-4 rounded-xl bg-slate-900 border border-amber-500/50 bg-amber-950/10 transition-all hover:border-amber-400/70">
+            <div class="flex-1 min-h-0 overflow-y-auto p-3 space-y-3" id="agentClusterList">
+              <button type="button" onclick="switchAgentTab('d2o_h2')" data-agent-id="d2o_h2" class="agent-card agent-card-warn relative w-full text-left p-4 rounded-xl border border-slate-800 bg-[#162238] transition-all duration-200 overflow-hidden">
+                <div class="absolute top-0 right-0 w-24 h-24 bg-amber-500/5 rounded-full blur-2xl pointer-events-none"></div>
                 <div class="flex items-start justify-between gap-2">
-                  <div class="flex items-start gap-2.5">
-                    <div class="w-8 h-8 rounded-lg bg-amber-500/15 border border-amber-500/30 flex items-center justify-center text-amber-300 shrink-0"><i class="ph ph-flask text-lg"></i></div>
-                    <div>
-                      <div class="text-xs font-bold text-white leading-snug">重水波动箱氢浓度监测 Agent</div>
-                      <div class="text-[10px] text-slate-400 mt-1">靶站水冷公用系统</div>
+                  <div class="flex items-start gap-2.5 min-w-0">
+                    <div class="w-9 h-9 rounded-lg bg-amber-500/20 text-amber-300 border border-amber-500/40 flex items-center justify-center shrink-0">
+                      <i class="ph ph-flask text-lg"></i>
+                    </div>
+                    <div class="min-w-0">
+                      <h3 class="font-bold text-sm text-white leading-snug">重水波动箱气相氢监测 Agent</h3>
+                      <span class="text-[10px] text-slate-400 font-mono">Tag: 靶站水冷公用系统</span>
                     </div>
                   </div>
-                  <span class="w-2 h-2 rounded-full bg-amber-400 animate-pulse mt-1 shrink-0"></span>
+                  <span class="shrink-0 px-2 py-0.5 rounded text-[9px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/40 animate-pulse">早期累积 3.82%</span>
                 </div>
-                <div class="mt-3 inline-flex items-center gap-1.5 px-2 py-1 rounded-md bg-amber-500/15 text-amber-300 border border-amber-500/30 text-[10px] font-semibold">
-                  <i class="ph ph-warning text-xs"></i> 早期累积预警 3.8%
+                <p class="text-[11px] text-slate-300/90 mt-2.5 leading-relaxed">高能质子靶体辐射水解动力学拟合，色谱基线漂移与死机虚警智能消除。</p>
+                <div class="mt-2.5 pt-2 border-t border-slate-800/80 flex items-center justify-between gap-2 text-[9px] text-slate-400 font-mono">
+                  <span class="truncate">模型: DeepSeek-V4-Pro</span>
+                  <span class="text-amber-400/90 flex items-center gap-1 shrink-0"><span class="w-1.5 h-1.5 rounded-full bg-amber-400"></span>需前置微调排气</span>
                 </div>
               </button>
 
-              <button type="button" onclick="selectAgent('water')" data-agent-id="water" class="agent-card w-full text-left p-4 rounded-xl bg-slate-900/60 border border-slate-800 hover:border-slate-700 transition-all">
+              <button type="button" onclick="switchAgentTab('water_drift')" data-agent-id="water_drift" class="agent-card relative w-full text-left p-4 rounded-xl border border-slate-800 bg-[#162238] hover:border-slate-700 transition-all duration-200 overflow-hidden">
                 <div class="flex items-start justify-between gap-2">
-                  <div class="flex items-start gap-2.5">
-                    <div class="w-8 h-8 rounded-lg bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-300 shrink-0"><i class="ph ph-drop text-lg"></i></div>
-                    <div>
-                      <div class="text-xs font-bold text-white leading-snug">靶站水冷一次回路微漂移预警 Agent</div>
-                      <div class="text-[10px] text-slate-400 mt-1">水冷回路</div>
+                  <div class="flex items-start gap-2.5 min-w-0">
+                    <div class="w-9 h-9 rounded-lg bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 flex items-center justify-center shrink-0">
+                      <i class="ph ph-drop text-lg"></i>
+                    </div>
+                    <div class="min-w-0">
+                      <h3 class="font-bold text-sm text-white leading-snug">靶站一次水回路微漂移 Agent</h3>
+                      <span class="text-[10px] text-slate-400 font-mono">Tag: 水冷主循环回路</span>
                     </div>
                   </div>
-                  <span class="w-2 h-2 rounded-full bg-emerald-400 mt-1 shrink-0"></span>
+                  <span class="shrink-0 px-2 py-0.5 rounded text-[9px] font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/30">状态正常</span>
                 </div>
-                <div class="mt-3 inline-flex items-center gap-1.5 px-2 py-1 rounded-md bg-emerald-500/10 text-emerald-300 border border-emerald-500/30 text-[10px] font-semibold">
-                  <i class="ph ph-check-circle text-xs"></i> 状态正常
+                <p class="text-[11px] text-slate-400 mt-2.5 leading-relaxed">板式换热器热阻慢速衰减趋势识别，一次水进出口压差在 0.28 MPa 稳定无突变。</p>
+                <div class="mt-2.5 pt-2 border-t border-slate-800/80 flex items-center justify-between gap-2 text-[9px] text-slate-500 font-mono">
+                  <span class="truncate">模型: DeepSeek-V4-Pro</span>
+                  <span class="text-emerald-400/80 shrink-0">温控平稳 (25.1℃)</span>
                 </div>
               </button>
 
-              <button type="button" onclick="selectAgent('cryo')" data-agent-id="cryo" class="agent-card w-full text-left p-4 rounded-xl bg-slate-900/60 border border-slate-800 hover:border-slate-700 transition-all">
+              <button type="button" onclick="switchAgentTab('cryo_ccr')" data-agent-id="cryo_ccr" class="agent-card relative w-full text-left p-4 rounded-xl border border-slate-800 bg-[#162238] hover:border-slate-700 transition-all duration-200 overflow-hidden">
                 <div class="flex items-start justify-between gap-2">
-                  <div class="flex items-start gap-2.5">
-                    <div class="w-8 h-8 rounded-lg bg-sky-500/10 border border-sky-500/30 flex items-center justify-center text-sky-300 shrink-0"><i class="ph ph-snowflake text-lg"></i></div>
-                    <div>
-                      <div class="text-xs font-bold text-white leading-snug">低温样品环境换样防呆向导 Agent</div>
-                      <div class="text-[10px] text-slate-400 mt-1">样品环境</div>
+                  <div class="flex items-start gap-2.5 min-w-0">
+                    <div class="w-9 h-9 rounded-lg bg-sky-500/10 text-sky-400 border border-sky-500/30 flex items-center justify-center shrink-0">
+                      <i class="ph ph-snowflake text-lg"></i>
+                    </div>
+                    <div class="min-w-0">
+                      <h3 class="font-bold text-sm text-white leading-snug">低温样品环境换样防呆 Agent</h3>
+                      <span class="text-[10px] text-slate-400 font-mono">Tag: 谱仪样品环境 (SANS/MPI)</span>
                     </div>
                   </div>
-                  <span class="w-2 h-2 rounded-full bg-sky-400 mt-1 shrink-0"></span>
+                  <span class="shrink-0 px-2 py-0.5 rounded text-[9px] font-bold bg-sky-500/10 text-sky-400 border border-sky-500/30">就绪待命</span>
                 </div>
-                <div class="mt-3 inline-flex items-center gap-1.5 px-2 py-1 rounded-md bg-sky-500/10 text-sky-300 border border-sky-500/30 text-[10px] font-semibold">
-                  <i class="ph ph-clock text-xs"></i> 就绪待命
+                <p class="text-[11px] text-slate-400 mt-2.5 leading-relaxed">抽真空 20 分钟 50Pa 门槛巡航拦截，LakeShore 336 测温链路反向阻抗校验。</p>
+                <div class="mt-2.5 pt-2 border-t border-slate-800/80 flex items-center justify-between gap-2 text-[9px] text-slate-500 font-mono">
+                  <span class="truncate">模型: DeepSeek-V4-Pro</span>
+                  <span class="text-sky-400/80 shrink-0">红线守卫 Active</span>
                 </div>
               </button>
 
-              <button type="button" onclick="selectAgent('patrol')" data-agent-id="patrol" class="agent-card w-full text-left p-4 rounded-xl bg-slate-900/60 border border-slate-800 hover:border-slate-700 transition-all">
+              <button type="button" onclick="switchAgentTab('patrol_multi')" data-agent-id="patrol_multi" class="agent-card relative w-full text-left p-4 rounded-xl border border-slate-800 bg-[#162238] hover:border-slate-700 transition-all duration-200 overflow-hidden">
                 <div class="flex items-start justify-between gap-2">
-                  <div class="flex items-start gap-2.5">
-                    <div class="w-8 h-8 rounded-lg bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-300 shrink-0"><i class="ph ph-eye text-lg"></i></div>
-                    <div>
-                      <div class="text-xs font-bold text-white leading-snug">谱仪大厅多模态巡检 Agent</div>
-                      <div class="text-[10px] text-slate-400 mt-1">现场巡检</div>
+                  <div class="flex items-start gap-2.5 min-w-0">
+                    <div class="w-9 h-9 rounded-lg bg-purple-500/10 text-purple-400 border border-purple-500/30 flex items-center justify-center shrink-0">
+                      <i class="ph ph-eye text-lg"></i>
+                    </div>
+                    <div class="min-w-0">
+                      <h3 class="font-bold text-sm text-white leading-snug">谱仪大厅多模态巡检 Agent</h3>
+                      <span class="text-[10px] text-slate-400 font-mono">Tag: 现场机柜与异响声学</span>
                     </div>
                   </div>
-                  <span class="w-2 h-2 rounded-full bg-emerald-400 mt-1 shrink-0"></span>
+                  <span class="shrink-0 px-2 py-0.5 rounded text-[9px] font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/30">正常打卡</span>
                 </div>
-                <div class="mt-3 inline-flex items-center gap-1.5 px-2 py-1 rounded-md bg-emerald-500/10 text-emerald-300 border border-emerald-500/30 text-[10px] font-semibold">
-                  <i class="ph ph-check-circle text-xs"></i> 正常
+                <p class="text-[11px] text-slate-400 mt-2.5 leading-relaxed">203、204 泵体声学频谱分析与机柜指示灯 CV 识别，未检出异常高频摩擦杂音。</p>
+                <div class="mt-2.5 pt-2 border-t border-slate-800/80 flex items-center justify-between gap-2 text-[9px] text-slate-500 font-mono">
+                  <span class="truncate">模型: BGE + DeepSeek-V4</span>
+                  <span class="text-emerald-400/80 shrink-0">声学本底正常</span>
                 </div>
               </button>
+
+              <div onclick="showToast('已接入开放式 Agent 注册框架，支持通过 Python / HepAI SDK 热插拔新实体！')" class="border border-dashed border-slate-800 hover:border-sky-500/40 rounded-xl p-3 text-center cursor-pointer transition-colors text-[10px] text-slate-400 hover:text-sky-300 flex items-center justify-center gap-1.5">
+                <i class="ph ph-plus-circle text-sm"></i>
+                <span>接入新领域智能 Agent (预留标准微服务接口)</span>
+              </div>
+            </div>
+
+            <div class="shrink-0 px-4 py-2.5 border-t border-slate-800/80 bg-slate-950/40 flex items-center justify-between font-mono text-[9px] text-slate-500">
+              <span>CLUSTER LATENCY</span>
+              <span class="text-emerald-400">12ms · SYNCED</span>
             </div>
           </aside>
 
-          <!-- RIGHT: Active Agent Workspace -->
-          <div class="xl:col-span-8 space-y-4" id="agentWorkbench">
-            <div class="bg-[#0e1626] border border-amber-500/25 rounded-xl p-5">
-              <div class="flex flex-col lg:flex-row lg:items-start justify-between gap-3 pb-4 border-b border-slate-800">
-                <div>
-                  <div class="flex flex-wrap items-center gap-2">
-                    <h3 class="text-sm font-bold text-white" id="agentWorkspaceTitle">重水波动箱氢浓度监测 Agent</h3>
-                    <span id="agentVersionTag" class="px-2 py-0.5 rounded text-[10px] font-mono text-sky-300 bg-sky-500/10 border border-sky-500/30">v2.4.1-hydrogen</span>
+          <!-- RIGHT COLUMN: ACTIVE AGENT DEDICATED CLINIC CABIN -->
+          <div class="xl:col-span-8 min-h-0 flex flex-col gap-3" id="agentWorkbench">
+            <div id="agentHeaderShell" data-tone="amber" class="shrink-0 rounded-xl bg-[#162238] border border-slate-800 p-4 shadow-xl shadow-black/20">
+              <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-3 border-b border-slate-800/80">
+                <div class="flex items-center gap-3 min-w-0">
+                  <div id="agentHeaderIconWrap" class="w-10 h-10 rounded-xl bg-amber-500/20 text-amber-300 border border-amber-500/40 flex items-center justify-center text-xl shrink-0">
+                    <i id="agentHeaderIcon" class="ph ph-flask"></i>
                   </div>
-                  <div class="flex flex-wrap items-center gap-3 text-[10px] text-slate-400 mt-2">
-                    <span class="font-mono">MODEL: <strong class="text-slate-200">hepai/deepseek-v4-pro</strong></span>
-                    <span class="w-px h-3 bg-slate-700"></span>
-                    <span class="font-mono">机理层级: <strong class="text-emerald-300">PASS</strong></span>
-                    <span class="w-px h-3 bg-slate-700"></span>
-                    <span>最后推理 <span class="font-mono text-slate-300" id="agentLastInference">12s ago</span></span>
+                  <div class="min-w-0">
+                    <div class="flex flex-wrap items-center gap-2">
+                      <h3 class="text-sm sm:text-base font-bold text-white truncate" id="agentWorkspaceTitle">重水波动箱气相氢监测 Agent</h3>
+                      <span id="agentHeaderStatus" class="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-amber-500/20 text-amber-300 border border-amber-500/40">早期预警</span>
+                    </div>
+                    <div class="flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] text-slate-400 mt-1 font-mono">
+                      <span>版本: <strong id="agentVersionTag" class="text-slate-200">v1.0-PhysicsHybrid</strong></span>
+                      <span class="hidden sm:inline text-slate-700">•</span>
+                      <span>底座: <strong id="agentModelText" class="text-slate-200">HepAI / DeepSeek-V4-Pro</strong></span>
+                      <span class="hidden sm:inline text-slate-700">•</span>
+                      <span>监测点: <strong id="agentMonitoringPoint" class="text-sky-300">TT-D2O-H2-01</strong></span>
+                    </div>
                   </div>
                 </div>
-                <div class="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-emerald-950/25 border border-emerald-800/40 text-[10px] text-emerald-300 shrink-0">
-                  <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span> 推理链路在线
+                <div class="text-left sm:text-right shrink-0">
+                  <span class="text-[10px] text-slate-500 block font-mono">最后推断心跳</span>
+                  <span class="text-[11px] text-sky-400 font-mono font-bold" id="agentHeartbeat">--</span>
                 </div>
               </div>
-              <div class="mt-4 rounded-xl border border-amber-500/40 bg-amber-950/20 p-4" id="agentVerdictBanner">
-                <div class="flex items-start gap-3">
-                  <div class="w-8 h-8 rounded-lg bg-amber-500/15 border border-amber-500/30 flex items-center justify-center text-amber-300 shrink-0"><i class="ph ph-brain text-lg"></i></div>
-                  <div>
-                    <div class="text-[10px] uppercase tracking-wider text-amber-300/80 font-bold">当前机理判定</div>
-                    <p class="text-xs text-amber-100 leading-relaxed mt-1" id="agentVerdictText">当前打靶功率 200kW 稳定，氢浓度平滑上升至 3.8%，判定为真实物理产氢累积，排气通畅但需前置关注。</p>
+
+              <div id="agentVerdictBanner" class="mt-3 rounded-lg border border-amber-500/40 bg-amber-950/30 px-3.5 py-2.5 text-amber-300 agent-verdict-pulse">
+                <div class="flex items-start gap-2.5">
+                  <div class="w-7 h-7 rounded-md bg-amber-500/15 border border-amber-500/30 flex items-center justify-center text-amber-300 shrink-0">
+                    <i class="ph ph-warning text-base"></i>
+                  </div>
+                  <div class="min-w-0">
+                    <div class="text-[9px] uppercase tracking-[0.18em] text-amber-300/80 font-bold" id="agentVerdictLabel">当前机理判定</div>
+                  <p class="text-[11px] text-amber-100 leading-relaxed mt-1" id="agentVerdictText">当前打靶功率 200kW 稳定，氢浓度平滑上升至 3.82%，判定为真实物理产氢累积，排气通畅但需前置关注。</p>
+                  <p class="text-[10px] text-amber-300/80 leading-relaxed mt-1 hidden" id="agentVerdictDetail"></p>
                   </div>
                 </div>
               </div>
             </div>
 
-            <div class="bg-[#0e1626] border border-slate-800 rounded-xl p-5">
-              <div class="flex items-center justify-between mb-3">
-                <div class="flex items-center gap-2">
-                  <i class="ph ph-activity text-sky-400"></i>
-                  <h4 class="text-xs font-bold text-white">实时感知特征</h4>
+            <div class="flex-1 min-h-0 overflow-y-auto pr-1 space-y-3" id="agentWorkbenchScroll">
+              <div class="rounded-xl bg-[#162238] border border-slate-800 p-4">
+                <div class="flex items-center justify-between gap-2 mb-2.5">
+                  <div class="flex items-center gap-2">
+                    <i class="ph ph-waveform text-sky-400 text-sm"></i>
+                    <h4 class="text-[11px] font-bold text-white tracking-wide">实时遥测特征</h4>
+                  </div>
+                  <span class="text-[9px] font-mono text-slate-500">PV STREAM · 5 CHANNELS · LIVE</span>
                 </div>
-                <span class="text-[10px] font-mono text-slate-500">PV STREAM · LIVE</span>
+                <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-2.5" id="agentPvGrid"></div>
               </div>
-              <div class="grid grid-cols-2 md:grid-cols-5 gap-3" id="agentPvGrid">
-                <div class="rounded-lg bg-slate-900/70 border border-slate-800 p-3">
-                  <div class="text-[10px] text-slate-500">打靶功率</div>
-                  <div class="mt-1 text-lg font-mono font-bold text-sky-300">200<span class="text-xs font-normal text-slate-400"> kW</span></div>
-                  <div class="text-[9px] text-emerald-400 mt-1">● 稳定</div>
+
+              <div class="rounded-xl bg-[#162238] border border-slate-800 p-4">
+                <div class="flex flex-wrap items-center gap-2 mb-2.5">
+                  <i class="ph ph-tree-structure text-cyan-400 text-sm"></i>
+                  <h4 class="text-[11px] font-bold text-white tracking-wide">机理与大模型诊断流</h4>
+                  <span class="px-1.5 py-0.5 rounded text-[8px] font-mono text-cyan-300 bg-cyan-500/10 border border-cyan-500/30">PHYSICS + LLM · RAG EVIDENCE</span>
                 </div>
-                <div class="rounded-lg bg-slate-900/70 border border-amber-700/30 p-3">
-                  <div class="text-[10px] text-slate-500">实测氢浓度</div>
-                  <div class="mt-1 text-lg font-mono font-bold text-amber-300">3.82<span class="text-xs font-normal text-slate-400"> %</span></div>
-                  <div class="text-[9px] text-amber-400 mt-1">▲ 缓升</div>
-                </div>
-                <div class="rounded-lg bg-slate-900/70 border border-slate-800 p-3">
-                  <div class="text-[10px] text-slate-500">缓冲罐压力</div>
-                  <div class="mt-1 text-lg font-mono font-bold text-emerald-300">0.11<span class="text-xs font-normal text-slate-400"> MPa</span></div>
-                  <div class="text-[9px] text-emerald-400 mt-1">● 正常</div>
-                </div>
-                <div class="rounded-lg bg-slate-900/70 border border-slate-800 p-3">
-                  <div class="text-[10px] text-slate-500">驱动气压</div>
-                  <div class="mt-1 text-lg font-mono font-bold text-sky-300">0.45<span class="text-xs font-normal text-slate-400"> MPa</span></div>
-                  <div class="text-[9px] text-emerald-400 mt-1">● 正常</div>
-                </div>
-                <div class="rounded-lg bg-slate-900/70 border border-emerald-700/30 p-3 col-span-2 md:col-span-1">
-                  <div class="text-[10px] text-slate-500">工控机心跳</div>
-                  <div class="mt-1 text-base font-bold text-emerald-300">正常</div>
-                  <div class="text-[9px] text-emerald-400 mt-1">● 4ms</div>
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-2.5 text-xs" id="agentDiagnosisFlow">
+                  <div class="agent-diagnostic-card rounded-lg border border-slate-800 bg-slate-950/40 p-3 border-l-2 border-l-sky-500/70" onclick="toggleAgentDiagnostic(this)" title="点击折叠/展开说明">
+                    <div class="flex items-center justify-between gap-2">
+                      <div class="flex items-center gap-2 text-[10px] font-bold text-sky-300"><span class="w-4 h-4 rounded bg-sky-500/15 border border-sky-500/30 flex items-center justify-center text-[8px] font-mono">01</span>异常归因分析</div>
+                      <i class="ph ph-caret-down text-slate-600 text-xs"></i>
+                    </div>
+                    <div class="agent-diagnostic-body mt-1.5">
+                      <p id="agentReasonText" class="text-[10px] text-slate-300/90 leading-relaxed">已自动排除【色谱工控机死锁】（时序曲线保持物理波动的连续微斜率）与【驱动载气欠压】（氮气压力 0.45MPa 正常）。判定为靶体辐照分解水引起的真微富集，建议当班值班员前置执行在线排气消缺。</p>
+                    </div>
+                  </div>
+
+                  <div class="agent-diagnostic-card rounded-lg border border-slate-800 bg-slate-950/40 p-3 border-l-2 border-l-emerald-500/70" onclick="toggleAgentDiagnostic(this)" title="点击折叠/展开说明">
+                    <div class="flex items-center justify-between gap-2">
+                      <div class="flex items-center gap-2 text-[10px] font-bold text-emerald-300"><span class="w-4 h-4 rounded bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-center text-[8px] font-mono">02</span>历史溯源参考</div>
+                      <i class="ph ph-caret-down text-slate-600 text-xs"></i>
+                    </div>
+                    <div class="agent-diagnostic-body mt-1.5">
+                      <p id="agentReferenceText" class="text-[10px] text-slate-300/90 leading-relaxed">引用历史档案《2022-10-14 水冷系统排气记录》：同类打靶功率区间曾出现 3.5%~4.1% 的氢累积平台，通过在线排气与持续观察恢复至 2.6%。</p>
+                    </div>
+                  </div>
+
+                  <div class="agent-diagnostic-card rounded-lg border border-slate-800 bg-slate-950/40 p-3 border-l-2 border-l-amber-500/70" onclick="toggleAgentDiagnostic(this)" title="点击折叠/展开说明">
+                    <div class="flex items-center justify-between gap-2">
+                      <div class="flex items-center gap-2 text-[10px] font-bold text-amber-300"><span class="w-4 h-4 rounded bg-amber-500/15 border border-amber-500/30 flex items-center justify-center text-[8px] font-mono">03</span>排障动作建议</div>
+                      <i class="ph ph-caret-down text-slate-600 text-xs"></i>
+                    </div>
+                    <div class="agent-diagnostic-body mt-1.5">
+                      <p id="agentAdviceText" class="text-[10px] text-slate-300/90 leading-relaxed">核实在线自动排气阀开位与反馈信号，确认排气通畅；保持打靶工况不变，持续观察 30 分钟氢浓度趋势与缓冲罐压力变化。</p>
+                    </div>
+                  </div>
+
+                  <div class="rounded-lg border border-rose-500/40 bg-rose-950/30 p-3 shadow-lg shadow-rose-950/20">
+                    <div class="flex items-center gap-2 text-[10px] font-bold text-rose-300">
+                      <span class="w-4 h-4 rounded bg-rose-500/20 border border-rose-500/40 flex items-center justify-center text-[8px] font-mono">04</span>
+                      刚性安全红线
+                      <span class="w-1.5 h-1.5 rounded-full bg-rose-500 animate-ping"></span>
+                    </div>
+                    <p id="agentRedlineText" class="text-[11px] font-bold text-rose-200 leading-relaxed mt-1.5">氢浓度未降至 3.0% 以下严禁关闭排气。</p>
+                  </div>
                 </div>
               </div>
             </div>
 
-            <div class="bg-[#0e1626] border border-slate-800 rounded-xl p-5">
-              <div class="flex items-center gap-2 mb-4">
-                <i class="ph ph-tree-structure text-cyan-400"></i>
-                <h4 class="text-xs font-bold text-white">机理与大模型诊断流</h4>
-                <span class="px-1.5 py-0.5 rounded text-[9px] font-mono text-cyan-300 bg-cyan-500/10 border border-cyan-500/30">STRUCTURED REASONING</span>
+            <div class="shrink-0 rounded-xl bg-[#162238] border border-slate-800 p-3.5 space-y-2.5 shadow-lg shadow-black/20">
+              <div class="flex items-center justify-between gap-2">
+                <div class="flex items-center gap-2 text-[11px] font-bold text-white">
+                  <i class="ph ph-git-commit text-sky-400 text-sm"></i>
+                  智能体联动闭环
+                </div>
+                <span class="hidden sm:inline text-[8px] font-mono text-slate-500">CROSS-MODULE ORCHESTRATION</span>
               </div>
-              <div class="space-y-3" id="agentDiagnosisFlow">
-                <div class="rounded-lg border border-slate-800 bg-slate-900/50 p-3.5">
-                  <div class="flex items-center gap-2 text-[11px] font-bold text-sky-300"><span class="w-5 h-5 rounded bg-sky-500/15 border border-sky-500/30 flex items-center justify-center text-[10px]">1</span>异常归因分析</div>
-                  <p class="text-[11px] text-slate-300 leading-relaxed mt-2">已排除工控机死机与气路欠压：心跳周期稳定在 4ms、驱动气压维持 0.45MPa，且 PV 数据无中断跳变；氢浓度呈平滑单调上升，符合真实物理产氢而非传感器或通讯故障。</p>
-                </div>
-                <div class="rounded-lg border border-slate-800 bg-slate-900/50 p-3.5">
-                  <div class="flex items-center gap-2 text-[11px] font-bold text-sky-300"><span class="w-5 h-5 rounded bg-sky-500/15 border border-sky-500/30 flex items-center justify-center text-[10px]">2</span>历史溯源参考</div>
-                  <p class="text-[11px] text-slate-300 leading-relaxed mt-2">引用历史档案《2022-10-14 水冷系统排气记录》：同类打靶功率区间曾出现 3.5%~4.1% 的氢累积平台，通过在线排气与持续观察恢复至 2.6%。</p>
-                </div>
-                <div class="rounded-lg border border-slate-800 bg-slate-900/50 p-3.5">
-                  <div class="flex items-center gap-2 text-[11px] font-bold text-sky-300"><span class="w-5 h-5 rounded bg-sky-500/15 border border-sky-500/30 flex items-center justify-center text-[10px]">3</span>排障动作建议</div>
-                  <p class="text-[11px] text-slate-300 leading-relaxed mt-2">核实在线自动排气阀开位与反馈信号，确认排气通畅；保持打靶工况不变，持续观察 30 分钟氢浓度趋势与缓冲罐压力变化。</p>
-                </div>
-                <div class="rounded-lg border border-rose-500/60 bg-rose-950/30 p-3.5 shadow-lg shadow-rose-950/20">
-                  <div class="flex items-center gap-2 text-[11px] font-bold text-rose-300"><span class="w-5 h-5 rounded bg-rose-500/20 border border-rose-500/40 flex items-center justify-center text-[10px]">4</span>刚性安全红线</div>
-                  <p class="text-xs font-bold text-rose-200 leading-relaxed mt-2">氢浓度未降至 3.0% 以下严禁关闭排气。</p>
-                </div>
-              </div>
-            </div>
-
-            <div class="bg-[#0e1626] border border-slate-800 rounded-xl p-5 space-y-4">
-              <div class="flex items-center gap-2">
-                <i class="ph ph-plugs-connected text-emerald-400"></i>
-                <h4 class="text-xs font-bold text-white">闭环联动与交互工具栏</h4>
-                <span class="text-[10px] text-slate-500">CROSS-MODULE ORCHESTRATION</span>
-              </div>
-              <div class="grid grid-cols-1 md:grid-cols-3 gap-2.5">
-                <button type="button" onclick="agentCreateEvent()" class="px-3 py-2.5 rounded-lg bg-sky-600/15 hover:bg-sky-600/30 text-sky-300 border border-sky-500/40 text-[11px] font-semibold flex items-center justify-center gap-1.5 transition-all">
-                  <i class="ph ph-kanban"></i> 📋 一键生成看板工单 <span class="text-[9px] text-sky-400/70">模块2</span>
+              <div class="grid grid-cols-1 md:grid-cols-3 gap-2">
+                <button type="button" onclick="agentCreateEvent()" class="group px-3 py-2 rounded-lg bg-sky-600/10 hover:bg-sky-600/25 text-sky-300 border border-sky-500/40 hover:border-sky-400 text-[10px] font-semibold flex items-center justify-center gap-1.5 transition-all hover:shadow-lg hover:shadow-sky-950/40">
+                  <i class="ph ph-kanban text-sm"></i>
+                  <span>📋 一键生成看板工单</span>
+                  <span class="text-[8px] font-mono text-sky-500/80 group-hover:text-sky-300">M2</span>
                 </button>
-                <button type="button" onclick="agentOpenSop()" class="px-3 py-2.5 rounded-lg bg-indigo-600/15 hover:bg-indigo-600/30 text-indigo-300 border border-indigo-500/40 text-[11px] font-semibold flex items-center justify-center gap-1.5 transition-all">
-                  <i class="ph ph-book-open-text"></i> 📖 调阅排气规程向导 <span class="text-[9px] text-indigo-400/70">模块4</span>
+                <button type="button" onclick="agentOpenSop()" class="group px-3 py-2 rounded-lg bg-indigo-600/10 hover:bg-indigo-600/25 text-indigo-300 border border-indigo-500/40 hover:border-indigo-400 text-[10px] font-semibold flex items-center justify-center gap-1.5 transition-all hover:shadow-lg hover:shadow-indigo-950/40">
+                  <i class="ph ph-book-open-text text-sm"></i>
+                  <span>📖 调阅排气规程向导</span>
+                  <span class="text-[8px] font-mono text-indigo-500/80 group-hover:text-indigo-300">M4</span>
                 </button>
-                <button type="button" onclick="agentWriteShiftLog()" class="px-3 py-2.5 rounded-lg bg-emerald-600/15 hover:bg-emerald-600/30 text-emerald-300 border border-emerald-500/40 text-[11px] font-semibold flex items-center justify-center gap-1.5 transition-all">
-                  <i class="ph ph-notepad"></i> 📝 记入本班值班流水 <span class="text-[9px] text-emerald-400/70">模块1</span>
+                <button type="button" onclick="agentWriteShiftLog()" class="group px-3 py-2 rounded-lg bg-emerald-600/10 hover:bg-emerald-600/25 text-emerald-300 border border-emerald-500/40 hover:border-emerald-400 text-[10px] font-semibold flex items-center justify-center gap-1.5 transition-all hover:shadow-lg hover:shadow-emerald-950/40">
+                  <i class="ph ph-notepad text-sm"></i>
+                  <span>📝 记入本班值班流水</span>
+                  <span class="text-[8px] font-mono text-emerald-500/80 group-hover:text-emerald-300">M1</span>
                 </button>
               </div>
               <form onsubmit="handleAgentQuestion(event)" class="flex flex-col sm:flex-row items-stretch gap-2">
                 <div class="relative flex-1">
-                  <i class="ph ph-chat-circle-dots absolute left-3 top-1/2 -translate-y-1/2 text-slate-500"></i>
-                  <input id="agentQuestionInput" type="text" maxlength="300" placeholder="询问该 Agent 应对策略，例如：氢浓度若持续上升应如何处置？" class="w-full bg-slate-950 border border-slate-700 rounded-lg py-2.5 pl-9 pr-3 text-xs text-slate-200 placeholder:text-slate-600 focus:outline-none focus:border-sky-500">
+                  <i class="ph ph-chat-circle-dots absolute left-3 top-1/2 -translate-y-1/2 text-slate-600 text-sm"></i>
+                  <input id="agentQuestionInput" type="text" maxlength="300" placeholder="询问该 Agent 应对策略，例如：是否需降功率？" class="w-full bg-slate-950 border border-slate-700 rounded-lg py-2 pl-9 pr-3 text-[10px] text-slate-200 placeholder:text-slate-600 focus:outline-none focus:border-sky-500/70 focus:ring-1 focus:ring-sky-500/20 transition-all">
                 </div>
-                <button type="submit" class="px-4 py-2.5 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-xs font-semibold text-slate-200 flex items-center justify-center gap-1.5">
-                  <i class="ph ph-paper-plane-tilt"></i> 追问
+                <button type="submit" class="px-3.5 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 hover:border-sky-500/40 text-[10px] font-semibold text-slate-200 flex items-center justify-center gap-1.5 transition-all shrink-0">
+                  <i class="ph ph-paper-plane-tilt text-sm"></i> 发送问询
                 </button>
               </form>
-              <div id="agentAnswerPanel" class="hidden rounded-lg border border-sky-800/40 bg-sky-950/20 p-3 text-[11px] leading-relaxed text-sky-100/90"></div>
+              <div class="flex flex-wrap gap-1.5">
+                <span class="text-[8px] font-mono text-slate-600 self-center">QUICK ASK:</span>
+                <button type="button" onclick="askAgentQuick('是否需降功率')" class="px-2 py-0.5 rounded bg-slate-900 hover:bg-slate-800 border border-slate-800 hover:border-sky-500/30 text-[9px] text-slate-400 hover:text-sky-300 transition-colors">是否需降功率</button>
+                <button type="button" onclick="askAgentQuick('排气阀开位如何核实')" class="px-2 py-0.5 rounded bg-slate-900 hover:bg-slate-800 border border-slate-800 hover:border-sky-500/30 text-[9px] text-slate-400 hover:text-sky-300 transition-colors">排气阀开位如何核实</button>
+                <button type="button" onclick="askAgentQuick('氢浓度持续上升怎么办')" class="px-2 py-0.5 rounded bg-slate-900 hover:bg-slate-800 border border-slate-800 hover:border-sky-500/30 text-[9px] text-slate-400 hover:text-sky-300 transition-colors">持续上升怎么办</button>
+              </div>
+              <div id="agentAnswerPanel" class="hidden max-h-24 overflow-y-auto rounded-lg border border-sky-800/40 bg-sky-950/20 p-2.5 text-[10px] leading-relaxed text-sky-100/90"></div>
             </div>
           </div>
         </div>
       </section>
 
     </main>
+  </div>
+
+  <!-- ======================================================== -->
+  <!-- MODAL: 谱仪协助台账登记 (#modalAddAssist)                 -->
+  <!-- ======================================================== -->
+  <div id="modalAddAssist" class="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
+    <div class="bg-[#0f172a] border border-emerald-500/40 rounded-xl w-full max-w-lg shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-150 text-xs">
+      <div class="p-4 bg-slate-900 border-b border-slate-800 flex items-center justify-between">
+        <div class="flex items-center gap-2 text-emerald-400 font-bold text-sm">
+          <i class="ph ph-plus-circle text-lg"></i>
+          <span>登记谱仪协助工作记录 (追加至Excel台账)</span>
+        </div>
+        <button onclick="closeAddAssistModal()" class="text-slate-400 hover:text-white"><i class="ph ph-x text-lg"></i></button>
+      </div>
+
+      <form onsubmit="handleFormSubmitAssist(event)" class="p-5 space-y-3.5 text-slate-300 font-sans max-h-[82vh] overflow-y-auto">
+        <div>
+          <div class="flex items-center justify-between mb-1.5">
+            <label class="block text-slate-400 font-semibold">协助业务板块 *</label>
+            <button type="button" onclick="promptAddNewCategory()" class="text-[11px] text-emerald-400 hover:text-emerald-300 flex items-center gap-1">
+              <i class="ph ph-plus font-bold"></i> 新建分类
+            </button>
+          </div>
+          <div class="grid grid-cols-2 sm:grid-cols-3 gap-2" id="modalCategoryRadiosContainer"></div>
+        </div>
+
+        <div>
+          <label class="block text-slate-400 font-semibold mb-1">操作内容 *</label>
+          <div class="flex gap-2">
+            <input type="text" id="modalInputContent" required maxlength="500" placeholder="如：协助CCR06换样、协助开关散射室屏蔽门..." class="flex-1 min-w-0 bg-slate-950 border border-slate-700 rounded-lg p-2 text-slate-100 focus:outline-none focus:border-emerald-500">
+            <select onchange="if(this.value){ document.getElementById('modalInputContent').value = this.value; }" class="bg-slate-900 border border-slate-700 rounded-lg px-2 text-xs text-slate-400 focus:outline-none">
+              <option value="">快捷填充模板...</option>
+              <option value="协助CCR06换样">协助CCR06换样</option>
+              <option value="协助CCR09换样">协助CCR09换样</option>
+              <option value="协助开关散射室屏蔽门">协助开关散射室屏蔽门</option>
+              <option value="协助谱仪重新起run">协助谱仪重新起run</option>
+              <option value="协助真空泵组运行">协助真空泵组运行</option>
+              <option value="现场查看样品环境温度">现场查看样品环境温度</option>
+              <option value="独立更换样品、调整样品台、准直器工况">独立更换样品、调整样品台、准直器工况</option>
+              <option value="协助检查水系统辐射剂量监测曲线">协助检查水系统辐射剂量监测曲线</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div>
+            <div class="flex items-center justify-between mb-1">
+              <label class="block text-slate-400 font-semibold">所属谱仪/系统 *</label>
+              <button type="button" onclick="promptAddNewSpectrometer()" class="text-[11px] text-emerald-400 hover:text-emerald-300 flex items-center gap-0.5">
+                <i class="ph ph-plus font-bold"></i> 新增系统
+              </button>
+            </div>
+            <select id="modalInputSpectrometer" required class="w-full bg-slate-950 border border-slate-700 rounded-lg p-2 text-slate-100 focus:outline-none focus:border-emerald-500"></select>
+          </div>
+
+          <div>
+            <label class="block text-slate-400 font-semibold mb-1">班次类型 *</label>
+            <div class="flex items-center gap-4 mt-2">
+              <label class="flex items-center gap-1.5 cursor-pointer">
+                <input type="radio" name="modalInputShift" value="白班" checked class="text-emerald-500">
+                <span class="text-emerald-400 font-bold">白班</span>
+              </label>
+              <label class="flex items-center gap-1.5 cursor-pointer">
+                <input type="radio" name="modalInputShift" value="夜班" class="text-sky-500">
+                <span class="text-sky-400 font-bold">夜班</span>
+              </label>
+            </div>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div>
+            <label class="block text-slate-400 font-semibold mb-1">次数 (数字或 N) *</label>
+            <input type="text" id="modalInputCount" value="1" required maxlength="20" class="w-full bg-slate-950 border border-slate-700 rounded-lg p-2 text-slate-100 font-mono focus:outline-none focus:border-emerald-500">
+          </div>
+          <div>
+            <label class="block text-slate-400 font-semibold mb-1">操作时间 (YYYY/MM/DD) *</label>
+            <input type="text" id="modalInputDate" value="2026/11/9" required pattern="\d{4}/\d{1,2}/\d{1,2}" class="w-full bg-slate-950 border border-slate-700 rounded-lg p-2 text-slate-100 font-mono focus:outline-none focus:border-emerald-500">
+          </div>
+        </div>
+
+        <div>
+          <div class="flex items-center justify-between gap-2 mb-1.5">
+            <label class="block text-slate-400 font-semibold">操作人 (实名多选 · 支持双人/多人复核) *</label>
+            <span class="text-[11px] text-slate-500 truncate">已选：<strong id="selectedOperatorsEcho" class="text-emerald-300 font-mono">王健威、王征</strong></span>
+          </div>
+          <div class="grid grid-cols-5 gap-1.5 bg-slate-950/60 p-2.5 rounded-lg border border-slate-800" id="operatorChipsContainer"></div>
+          <input type="hidden" id="modalInputOperators" value="王健威、王征" required>
+        </div>
+
+        <div>
+          <label class="block text-slate-400 font-semibold mb-1">备注 (选填)</label>
+          <input type="text" id="modalInputNotes" maxlength="1000" placeholder="可选填补充说明..." class="w-full bg-slate-950 border border-slate-700 rounded-lg p-2 text-slate-100 focus:outline-none focus:border-emerald-500">
+        </div>
+
+        <div class="p-3 bg-slate-900 border-t border-slate-800 flex justify-end gap-2 -mx-5 -mb-5 mt-4">
+          <button type="button" onclick="closeAddAssistModal()" class="px-4 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300">取消</button>
+          <button type="submit" id="btnSubmitAssist" class="px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-semibold shadow-md shadow-emerald-600/30 disabled:opacity-50 disabled:cursor-not-allowed">确认追加到台账</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <div id="modalCustomCategory" class="fixed inset-0 bg-black/75 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
+    <div class="bg-[#0f172a] border border-slate-700 rounded-xl w-full max-w-sm p-4 space-y-3 text-xs shadow-2xl">
+      <div class="flex items-center justify-between text-white font-bold text-sm pb-2 border-b border-slate-800">
+        <span class="flex items-center gap-1.5 text-emerald-400"><i class="ph ph-plus-circle"></i> 新增协助业务分类</span>
+        <button onclick="closeCustomCategoryModal()" class="text-slate-400 hover:text-white"><i class="ph ph-x"></i></button>
+      </div>
+      <p class="text-slate-400">输入新增的分类名称（如：天车与吊装、辐射测量、气路保压）：</p>
+      <input type="text" id="newCategoryInputName" maxlength="80" placeholder="如：天车与吊装协助" class="w-full bg-slate-950 border border-slate-700 rounded-lg p-2 text-slate-100 focus:outline-none focus:border-emerald-500">
+      <div class="flex justify-end gap-2 pt-1">
+        <button onclick="closeCustomCategoryModal()" class="px-3 py-1.5 rounded bg-slate-800 text-slate-300">取消</button>
+        <button onclick="confirmAddCategory()" class="px-3 py-1.5 rounded bg-emerald-600 hover:bg-emerald-500 text-white font-semibold">确认新增</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="modalCustomSpectrometer" class="fixed inset-0 bg-black/75 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
+    <div class="bg-[#0f172a] border border-slate-700 rounded-xl w-full max-w-sm p-4 space-y-3 text-xs shadow-2xl">
+      <div class="flex items-center justify-between text-white font-bold text-sm pb-2 border-b border-slate-800">
+        <span class="flex items-center gap-1.5 text-emerald-400"><i class="ph ph-plus-circle"></i> 新增谱仪/工位系统</span>
+        <button onclick="closeCustomSpectrometerModal()" class="text-slate-400 hover:text-white"><i class="ph ph-x"></i></button>
+      </div>
+      <p class="text-slate-400">录入新接入的谱仪、线站或辅助系统名称：</p>
+      <input type="text" id="newSpectrometerInputName" maxlength="160" placeholder="如：能量分析谱仪 (EPS) 或 12#线站" class="w-full bg-slate-950 border border-slate-700 rounded-lg p-2 text-slate-100 focus:outline-none focus:border-emerald-500">
+      <div class="flex justify-end gap-2 pt-1">
+        <button onclick="closeCustomSpectrometerModal()" class="px-3 py-1.5 rounded bg-slate-800 text-slate-300">取消</button>
+        <button onclick="confirmAddSpectrometer()" class="px-3 py-1.5 rounded bg-emerald-600 hover:bg-emerald-500 text-white font-semibold">确认并选中</button>
+      </div>
+    </div>
   </div>
 
   <!-- ======================================================== -->
@@ -2059,6 +2516,9 @@
       renderSop();
       renderAgentWorkspace();
       renderUserAuditList();
+      applyAssistPermissions();
+      renderAssistCategoryTabs();
+      renderAssistTable();
     }
 
     function switchRole(role) {
@@ -2375,15 +2835,20 @@
       }
     };
     let activeSopKey = "door";
-    let activeAgentId = "hydrogen";
+    let activeAgentId = "d2o_h2";
+    let agentTypingTimer = null;
 
     const agentProfiles = {
-      hydrogen: {
-        name: "重水波动箱氢浓度监测 Agent",
-        version: "v2.4.1-hydrogen",
-        verdict: "当前打靶功率 200kW 稳定，氢浓度平滑上升至 3.8%，判定为真实物理产氢累积，排气通畅但需前置关注。",
-        verdictClass: "border-amber-500/40 bg-amber-950/20",
-        labelClass: "text-amber-300/80",
+      d2o_h2: {
+        name: "重水波动箱气相氢监测 Agent",
+        version: "v1.0-PhysicsHybrid",
+        tone: "amber",
+        icon: "ph-flask",
+        statusLabel: "早期预警",
+        model: "HepAI / DeepSeek-V4-Pro",
+        monitoringPoint: "TT-D2O-H2-01",
+        verdict: "智能体综合判定：打靶功率 200kW 稳定，氢浓度呈现真实物理产氢累积，已达 3.82% (临界 4.0%)！",
+        verdictDetail: "已自动排除【色谱工控机死锁】（时序曲线保持物理波动的连续微斜率）与【驱动载气欠压】（氮气压力 0.45MPa 正常）。判定为靶体辐照分解水引起的真微富集，建议当班值班员前置执行在线排气消缺。",
         reason: "已排除工控机死机与气路欠压：心跳周期稳定在 4ms、驱动气压维持 0.45MPa，且 PV 数据无中断跳变；氢浓度呈平滑单调上升，符合真实物理产氢而非传感器或通讯故障。",
         reference: "引用历史档案《2022-10-14 水冷系统排气记录》：同类打靶功率区间曾出现 3.5%~4.1% 的氢累积平台，通过在线排气与持续观察恢复至 2.6%。",
         advice: "核实在线自动排气阀开位与反馈信号，确认排气通畅；保持打靶工况不变，持续观察 30 分钟氢浓度趋势与缓冲罐压力变化。",
@@ -2392,14 +2857,26 @@
         eventDevice: "靶站重水波动箱 / 氢浓度监测",
         eventNotes: "打靶功率 200kW 稳定，实测氢浓度平滑上升至 3.82%，缓冲罐压力 0.11MPa、驱动气压 0.45MPa，工控机心跳正常。Agent 判定为真实物理产氢累积；需核实在线自动排气阀开位并持续观察 30 分钟。安全红线：氢浓度未降至 3.0% 以下严禁关闭排气。",
         logContent: "【智能 Agent 预警】重水波动箱氢浓度 3.82%，判定真实物理产氢累积；已核实自动排气阀开位并持续观察 30 分钟，氢浓度未降至 3.0% 以下严禁关闭排气。",
-        target: "靶站水冷回路"
+        target: "靶站水冷回路",
+        telemetry: [
+          { label: '打靶功率', value: '200', unit: 'kW', tone: 'sky', status: 'STABLE', dot: 'emerald' },
+          { label: '实测氢浓度', value: '3.82', unit: '%', tone: 'amber', status: 'RISING', dot: 'amber' },
+          { label: '缓冲罐压力', value: '0.11', unit: 'MPa', tone: 'emerald', status: 'NORMAL', dot: 'emerald' },
+          { label: '驱动气压', value: '0.45', unit: 'MPa', tone: 'sky', status: 'NORMAL', dot: 'emerald' },
+          { label: '工控机心跳', value: 'OK', unit: '', tone: 'emerald', status: '4ms', dot: 'emerald' }
+        ],
+        answer: '当前 200kW 打靶功率无需立即降功率。氢浓度 3.82% 仍处于 3.0%~4.1% 的历史可控平台内，应先核实在线自动排气阀开位、保持排气畅通，并以 30 分钟窗口观察浓度是否回落。若持续上升突破 4.1%，立即降功率并通知水冷专业组。'
       },
-      water: {
-        name: "靶站水冷一次回路微漂移预警 Agent",
+      water_drift: {
+        name: "靶站一次水回路微漂移 Agent",
         version: "v1.9.6-cooling",
+        tone: "emerald",
+        icon: "ph-drop",
+        statusLabel: "状态正常",
+        model: "HepAI / DeepSeek-V4-Pro",
+        monitoringPoint: "TT-WATER-DP-02",
+        verdictDetail: "板式换热器热阻与一次水流量趋势均位于历史包络线内，主循环泵组温控与振动本底稳定，排除传感器漂移引起的虚假预警。",
         verdict: "一次回路温差与流量基线保持稳定，当前未检出工艺侧或设备侧异常，处于正常监视状态。",
-        verdictClass: "border-emerald-500/40 bg-emerald-950/20",
-        labelClass: "text-emerald-300/80",
         reason: "主循环泵压差、流量与回水温度均位于历史包络线内，未出现持续性单调漂移；数据链路完整，排除传感器漂移造成的误报。",
         reference: "参考《2026 年靶站一次水冷回路运行基线》：同功率区间流量波动 ±2.1%，当前偏差处于正常范围。",
         advice: "保持基线监视，按班次复核泵组振动与滤网压差；若连续 3 个采样周期超出包络线，再升级为预警工单。",
@@ -2408,14 +2885,26 @@
         eventDevice: "靶站一次水冷回路 / 主循环泵组",
         eventNotes: "Agent 监视到一次回路流量出现短暂微漂移，已复核历史包络与泵组运行状态，当前判定为正常范围内波动，需按班次持续跟踪。",
         logContent: "【智能 Agent 监视】靶站水冷一次回路微漂移项复核：流量与温差仍在历史包络范围内，泵组运行正常，继续按班次跟踪。",
-        target: "靶站水冷回路"
+        target: "靶站水冷回路",
+        telemetry: [
+          { label: '回路流量', value: '186', unit: 'm³/h', tone: 'sky', status: 'NORMAL', dot: 'emerald' },
+          { label: '进出水温差', value: '4.2', unit: '℃', tone: 'emerald', status: 'STABLE', dot: 'emerald' },
+          { label: '泵组压差', value: '0.62', unit: 'MPa', tone: 'sky', status: 'NORMAL', dot: 'emerald' },
+          { label: '回水温度', value: '28.6', unit: '℃', tone: 'emerald', status: 'NORMAL', dot: 'emerald' },
+          { label: '振动 RMS', value: '2.1', unit: 'mm/s', tone: 'emerald', status: 'NORMAL', dot: 'emerald' }
+        ],
+        answer: '当前一次回路流量、温差与泵组压差均处于历史包络线内，无需干预。建议保持 200kW 工况并继续按班次跟踪；若连续 3 个采样周期流量偏差超过 ±2.1%，再升级为预警工单并通知水冷专业组。'
       },
-      cryo: {
+      cryo_ccr: {
         name: "低温样品环境换样防呆向导 Agent",
         version: "v3.0.2-cryo",
+        tone: "sky",
+        icon: "ph-snowflake",
+        statusLabel: "就绪待命",
+        model: "HepAI / DeepSeek-V4-Pro",
+        monitoringPoint: "CCR-05 / TT-CRYO-05",
+        verdictDetail: "样品室真空度与 LakeShore 温区满足换样准入条件，探测器高压与换样联锁状态正常，等待值班员发起标准换样流程。",
         verdict: "低温样品环境处于就绪待命状态，换样前置条件满足，等待值班员发起标准换样流程。",
-        verdictClass: "border-sky-500/40 bg-sky-950/20",
-        labelClass: "text-sky-300/80",
         reason: "样品室真空度、LakeShore 温区与探测器高压均满足换样准入条件；未检测到人员滞留或联锁未复位状态。",
         reference: "引用《SOP-02 谱仪实验重启 Run 前置门槛复核》与换样防呆检查单。",
         advice: "按 SOP 依次确认真空、温区与高压门槛，双人复核后执行换样；如抽真空超过 20 分钟未达 50Pa，立即中止。",
@@ -2424,14 +2913,26 @@
         eventDevice: "低温样品环境 CCR / LakeShore",
         eventNotes: "Agent 换样防呆检查发现前置条件需人工复核，已生成跟踪工单；执行换样前须按 SOP-02 完成真空、温区与探测器高压双人复核。",
         logContent: "【智能 Agent 向导】低温样品环境换样前置条件已复核，SOP-02 门槛满足，等待双人确认后执行换样。",
-        target: "低温样品环境 CCR"
+        target: "低温样品环境 CCR",
+        telemetry: [
+          { label: '样品室真空', value: '3.8e-4', unit: 'Pa', tone: 'sky', status: 'NORMAL', dot: 'emerald' },
+          { label: 'LakeShore 温区', value: '5.2', unit: 'K', tone: 'emerald', status: 'READY', dot: 'emerald' },
+          { label: 'CCR 冷头温度', value: '4.6', unit: 'K', tone: 'sky', status: 'NORMAL', dot: 'emerald' },
+          { label: '探测器 HV', value: '1.8', unit: 'kV', tone: 'emerald', status: 'READY', dot: 'emerald' },
+          { label: '换样联锁', value: 'READY', unit: '', tone: 'sky', status: 'ARMED', dot: 'emerald' }
+        ],
+        answer: '换样前置条件已满足，但不得跳过双人复核。请按 SOP-02 依次确认样品室真空、LakeShore 温区与探测器 HV，再执行换样。若抽真空超过 20 分钟仍未达到 50Pa，立即中止并上报值班长。'
       },
-      patrol: {
+      patrol_multi: {
         name: "谱仪大厅多模态巡检 Agent",
         version: "v1.7.4-vision",
+        tone: "emerald",
+        icon: "ph-eye",
+        statusLabel: "正常打卡",
+        model: "BGE + DeepSeek-V4",
+        monitoringPoint: "HALL-CAM-12 / ACOUSTIC-08",
+        verdictDetail: "多路视频画面与声光传感数据一致，未检出人员滞留、烟雾、漏水或异常电机摩擦杂音，巡检轨迹完整无盲区。",
         verdict: "谱仪大厅声光、视频与设备状态多模态巡检结果正常，未发现人员违规或设备异常。",
-        verdictClass: "border-emerald-500/40 bg-emerald-950/20",
-        labelClass: "text-emerald-300/80",
         reason: "多路视频画面与声光传感数据一致，未检出烟雾、漏水、异常振动或人员滞留；巡检轨迹完整无盲区。",
         reference: "参考《靶站谱仪运行组例行巡查路线》历史巡检记录与视频抽帧比对结果。",
         advice: "维持既有巡检节奏，下次例行巡查重点复核大厅机柜指示灯与管线密封状态。",
@@ -2440,7 +2941,15 @@
         eventDevice: "谱仪大厅 / 视频与声光传感",
         eventNotes: "Agent 多模态巡检发现需人工确认的现场特征，已生成复核工单；请值班员按例行巡检路线现场核实并记录处置结论。",
         logContent: "【智能 Agent 巡检】谱仪大厅多模态巡检完成：视频、声光与设备状态一致，未发现人员滞留或设备异常。",
-        target: "靶站综合大厅"
+        target: "靶站综合大厅",
+        telemetry: [
+          { label: '视频通道', value: '12/12', unit: '', tone: 'emerald', status: 'ONLINE', dot: 'emerald' },
+          { label: '声光传感器', value: '8/8', unit: '', tone: 'emerald', status: 'NORMAL', dot: 'emerald' },
+          { label: '巡检覆盖率', value: '100', unit: '%', tone: 'sky', status: 'COMPLETE', dot: 'emerald' },
+          { label: '识别告警', value: '0', unit: '项', tone: 'emerald', status: 'CLEAR', dot: 'emerald' },
+          { label: '巡检轨迹', value: 'SYNC', unit: '', tone: 'sky', status: '12ms', dot: 'emerald' }
+        ],
+        answer: '当前多模态巡检未发现人员滞留、烟雾、漏水或异常振动，无需立即处置。建议维持既有巡检节奏；下次例行巡查重点复核大厅机柜指示灯与管线密封状态，发现异常立即上报值班长。'
       }
     };
 
@@ -2471,6 +2980,7 @@
       });
       document.querySelectorAll('.nav-btn').forEach(b => {
         b.classList.remove('bg-sky-500/15', 'text-sky-400', 'border-sky-500/30');
+        b.classList.remove('bg-emerald-500/15', 'text-emerald-300', 'border-emerald-500/40');
         b.classList.add('text-slate-300', 'border-transparent');
       });
 
@@ -2481,100 +2991,313 @@
         targetView.classList.add('block');
       }
       if (targetNav) {
-        targetNav.classList.add('bg-sky-500/15', 'text-sky-400', 'border-sky-500/30');
+        if (tabKey === 'assist') {
+          targetNav.classList.add('bg-emerald-500/15', 'text-emerald-300', 'border-emerald-500/40');
+        } else {
+          targetNav.classList.add('bg-sky-500/15', 'text-sky-400', 'border-sky-500/30');
+        }
         targetNav.classList.remove('text-slate-300', 'border-transparent');
       }
 
+      const mainContainer = document.getElementById('mainContainer');
+      if (mainContainer) mainContainer.classList.toggle('agent-mode', tabKey === 'agent');
       if (tabKey === 'agent') renderAgentWorkspace();
+      if (tabKey === 'assist') {
+        renderAssistCategoryTabs();
+        renderAssistTable();
+        updateAssistDateSortUI();
+      }
+    }
+
+    const agentToneMeta = {
+      sky: {
+        text: 'text-sky-300',
+        border: 'border-slate-800',
+        accent: 'text-sky-400',
+        bar: 'bg-sky-400',
+        status: 'text-sky-400'
+      },
+      emerald: {
+        text: 'text-emerald-300',
+        border: 'border-slate-800',
+        accent: 'text-emerald-400',
+        bar: 'bg-emerald-400',
+        status: 'text-emerald-400'
+      },
+      amber: {
+        text: 'text-amber-300',
+        border: 'border-amber-500/40',
+        accent: 'text-amber-400',
+        bar: 'bg-amber-400',
+        status: 'text-amber-400'
+      },
+      cyan: {
+        text: 'text-cyan-300',
+        border: 'border-slate-800',
+        accent: 'text-cyan-400',
+        bar: 'bg-cyan-400',
+        status: 'text-cyan-400'
+      }
+    };
+
+    const agentHeaderToneClasses = {
+      amber: {
+        border: 'border-amber-500/40',
+        iconWrap: 'bg-amber-500/20 text-amber-300 border-amber-500/40',
+        badge: 'bg-amber-500/20 text-amber-300 border-amber-500/40',
+        banner: 'border-amber-500/40 bg-amber-950/30 text-amber-300',
+        bannerText: 'text-amber-100',
+        bannerLabel: 'text-amber-300/80'
+      },
+      emerald: {
+        border: 'border-emerald-500/40',
+        iconWrap: 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30',
+        badge: 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30',
+        banner: 'border-emerald-500/30 bg-emerald-950/25 text-emerald-300',
+        bannerText: 'text-emerald-100',
+        bannerLabel: 'text-emerald-300/80'
+      },
+      sky: {
+        border: 'border-sky-500/40',
+        iconWrap: 'bg-sky-500/15 text-sky-300 border-sky-500/30',
+        badge: 'bg-sky-500/15 text-sky-300 border-sky-500/30',
+        banner: 'border-sky-500/30 bg-sky-950/30 text-sky-300',
+        bannerText: 'text-sky-100',
+        bannerLabel: 'text-sky-300/80'
+      }
+    };
+
+    function agentToneClasses(tone) {
+      return agentToneMeta[tone] || agentToneMeta.sky;
+    }
+
+    function renderAgentTelemetry(profile) {
+      const grid = document.getElementById('agentPvGrid');
+      if (!grid) return;
+      grid.innerHTML = (profile.telemetry || []).map(item => {
+        const tone = agentToneClasses(item.tone);
+        const isWarn = item.dot === 'amber';
+        const dot = isWarn ? 'bg-amber-400 animate-pulse' : 'bg-emerald-400';
+        const statusTone = isWarn ? 'text-amber-400' : 'text-emerald-400';
+        const pulse = isWarn ? ' animate-pulse' : '';
+        const bar = isWarn
+          ? `<div class="w-full bg-slate-800 h-1.5 rounded-full mt-2 overflow-hidden"><div class="bg-amber-400 h-full w-[76%]"></div></div>`
+          : '';
+        return `<div class="rounded-xl bg-slate-950/60 border ${tone.border} px-3 py-2.5 ${item.tone === 'amber' ? 'glow-amber' : ''}">
+          <div class="flex items-center justify-between gap-1.5 text-[10px] text-slate-400">
+            <span class="truncate">${escapePdfText(item.label)}</span>
+            <span class="w-1.5 h-1.5 rounded-full shrink-0 ${dot}"></span>
+          </div>
+          <div class="flex items-baseline gap-1 mt-1">
+            <span class="font-mono text-2xl font-bold ${tone.text} leading-none">${escapePdfText(item.value)}</span>
+            <span class="text-[10px] text-slate-500 font-mono">${escapePdfText(item.unit)}</span>
+          </div>
+          ${bar}
+          <div class="text-[9px] font-mono ${statusTone}${pulse} mt-1.5">• ${escapePdfText(item.status)}</div>
+        </div>`;
+      }).join('');
+    }
+
+    function setAgentText(id, value) {
+      const element = document.getElementById(id);
+      if (element) element.textContent = value == null ? '' : String(value);
     }
 
     function renderAgentWorkspace() {
       const profile = agentProfiles[activeAgentId];
       if (!profile) return;
+      const toneKey = agentHeaderToneClasses[profile.tone] ? profile.tone : 'sky';
+      const tone = agentHeaderToneClasses[toneKey];
 
-      document.querySelectorAll('.agent-card').forEach(card => {
+      document.querySelectorAll('#agentClusterList .agent-card').forEach(card => {
         const isActive = card.getAttribute('data-agent-id') === activeAgentId;
-        card.className = isActive
-          ? "agent-card w-full text-left p-4 rounded-xl bg-slate-900 border border-amber-500/50 bg-amber-950/10 transition-all hover:border-amber-400/70"
-          : "agent-card w-full text-left p-4 rounded-xl bg-slate-900/60 border border-slate-800 hover:border-slate-700 transition-all";
+        card.classList.toggle('agent-card-active', isActive);
+      });
+      document.querySelectorAll('#agentDiagnosisFlow .agent-diagnostic-card').forEach(card => {
+        card.classList.remove('agent-card-collapsed');
       });
 
-      setSafeText('agentWorkspaceTitle', profile.name);
-      setSafeText('agentVersionTag', profile.version);
+      const header = document.getElementById('agentHeaderShell');
+      if (header) {
+        header.classList.remove('border-amber-500/40', 'border-emerald-500/40', 'border-sky-500/40');
+        header.classList.add(tone.border);
+        header.dataset.tone = toneKey;
+      }
+      const iconWrap = document.getElementById('agentHeaderIconWrap');
+      if (iconWrap) {
+        iconWrap.classList.remove('bg-amber-500/20', 'text-amber-300', 'border-amber-500/40', 'bg-emerald-500/15', 'text-emerald-300', 'border-emerald-500/30', 'bg-sky-500/15', 'text-sky-300', 'border-sky-500/30');
+        iconWrap.classList.add(...tone.iconWrap.split(' '));
+      }
+      const icon = document.getElementById('agentHeaderIcon');
+      if (icon) icon.className = `ph ${profile.icon || 'ph-cpu'}`;
+      const status = document.getElementById('agentHeaderStatus');
+      if (status) {
+        status.classList.remove('bg-amber-500/20', 'text-amber-300', 'border-amber-500/40', 'bg-emerald-500/15', 'text-emerald-300', 'border-emerald-500/30', 'bg-sky-500/15', 'text-sky-300', 'border-sky-500/30');
+        status.classList.add(...tone.badge.split(' '));
+        status.classList.toggle('animate-pulse', toneKey === 'amber');
+      }
+
+      setAgentText('agentWorkspaceTitle', profile.name);
+      setAgentText('agentVersionTag', profile.version);
+      setAgentText('agentModelText', profile.model || 'HepAI / DeepSeek-V4-Pro');
+      setAgentText('agentMonitoringPoint', profile.monitoringPoint || '--');
+      setAgentText('agentHeaderStatus', profile.statusLabel || '运行监视');
+      setAgentText('agentVerdictLabel', profile.label || '当前机理判定');
+      setAgentText('agentVerdictText', profile.verdict);
+      const verdictDetail = document.getElementById('agentVerdictDetail');
+      if (verdictDetail) {
+        verdictDetail.textContent = profile.verdictDetail || '';
+        verdictDetail.classList.toggle('hidden', !profile.verdictDetail);
+      }
+      setAgentText('agentHeartbeat', `${new Date().toLocaleTimeString('zh-CN', { hour12: false })} (实时在线)`);
+      setAgentText('agentReasonText', profile.reason);
+      setAgentText('agentReferenceText', profile.reference);
+      setAgentText('agentAdviceText', profile.advice);
+      setAgentText('agentRedlineText', profile.redline);
 
       const banner = document.getElementById('agentVerdictBanner');
-      if (banner) banner.className = `mt-4 rounded-xl border p-4 ${profile.verdictClass}`;
-      const verdictLabel = banner ? banner.querySelector('.uppercase') : null;
-      if (verdictLabel) verdictLabel.className = `text-[10px] uppercase tracking-wider font-bold ${profile.labelClass}`;
-      setSafeText('agentVerdictText', profile.verdict);
+      if (banner) {
+        banner.classList.remove('border-amber-500/40', 'bg-amber-950/30', 'text-amber-300', 'border-emerald-500/30', 'bg-emerald-950/25', 'text-emerald-300', 'border-sky-500/30', 'bg-sky-950/30', 'text-sky-300');
+        banner.classList.add(...tone.banner.split(' '));
+        banner.classList.toggle('agent-verdict-pulse', toneKey === 'amber');
+        const verdictText = document.getElementById('agentVerdictText');
+        if (verdictText) {
+          verdictText.classList.remove('text-amber-100', 'text-emerald-100', 'text-sky-100');
+          verdictText.classList.add(tone.bannerText);
+        }
+        const verdictLabel = document.getElementById('agentVerdictLabel');
+        if (verdictLabel) {
+          verdictLabel.classList.remove('text-amber-300/80', 'text-emerald-300/80', 'text-sky-300/80');
+          verdictLabel.classList.add(tone.bannerLabel);
+        }
+        if (verdictDetail) {
+          verdictDetail.classList.remove('text-amber-300/80', 'text-emerald-300/80', 'text-sky-300/80');
+          verdictDetail.classList.add(tone.bannerLabel);
+        }
+      }
 
-      const diagnosisPanels = document.querySelectorAll('#agentDiagnosisFlow .rounded-lg');
-      if (diagnosisPanels.length >= 4) {
-        const values = [profile.reason, profile.reference, profile.advice, profile.redline];
-        diagnosisPanels.forEach((panel, index) => {
-          const paragraph = panel.querySelector('p');
-          if (paragraph) paragraph.textContent = values[index];
-        });
+      renderAgentTelemetry(profile);
+
+      const scrollArea = document.getElementById('agentWorkbenchScroll');
+      if (scrollArea) scrollArea.scrollTop = 0;
+      const shell = document.getElementById('agentWorkbench');
+      if (shell) {
+        shell.classList.remove('agent-workspace-enter');
+        void shell.offsetWidth;
+        shell.classList.add('agent-workspace-enter');
       }
     }
-
-    function selectAgent(agentId) {
+    function switchAgentTab(agentId) {
       if (!agentProfiles[agentId]) return;
+      const changed = activeAgentId !== agentId;
       activeAgentId = agentId;
       renderAgentWorkspace();
       const panel = document.getElementById('agentAnswerPanel');
-      if (panel) panel.classList.add('hidden');
-      showToast(`已切换至【${agentProfiles[agentId].name}】工作舱`);
+      if (panel) {
+        panel.classList.add('hidden');
+        panel.innerHTML = '';
+      }
+      if (agentTypingTimer) {
+        clearInterval(agentTypingTimer);
+        agentTypingTimer = null;
+      }
+      if (changed) showToast(`已切换至【${agentProfiles[agentId].name}】工作舱`);
+    }
+
+    function selectAgent(agentId) {
+      switchAgentTab(agentId);
     }
 
     async function agentCreateEvent() {
       if (currentUser.role === 'viewer') return showToast('⚠️ 权限拦截：只读观察员无权生成看板工单');
       const profile = agentProfiles[activeAgentId];
+      const button = document.querySelector('#view-agent [onclick="agentCreateEvent()"]');
+      if (button) { button.disabled = true; button.classList.add('opacity-60'); }
       try {
         const created = await apiRequest('/events', {
           method: 'POST',
           body: {
             title: profile.eventTitle,
             device: profile.eventDevice,
-            priority: activeAgentId === 'hydrogen' ? '重要' : '一般',
+            priority: activeAgentId === 'd2o_h2' ? '重要' : '一般',
             reporter_name: currentUser.name || '智能Agent中枢',
             stage: 'pending',
             notes: profile.eventNotes
           }
         });
+        if (!eventsData.some(item => item.id === created.id)) {
+          eventsData.unshift(created);
+          renderKanban();
+        }
         await refreshAllData();
-        showToast(`Agent 已生成看板工单 [${created.id}]，已联动模块 2`);
+        showToast(`✅ 已派单至模块 2 事件看板：${created.id}`);
       } catch (error) {
         showToast(`⚠️ ${error.message}`);
+      } finally {
+        if (button) { button.disabled = false; button.classList.remove('opacity-60'); }
       }
     }
 
     function agentOpenSop() {
       switchTab('sop');
-      selectSopWorkflow(activeAgentId === 'cryo' ? 'run' : activeAgentId === 'hydrogen' || activeAgentId === 'water' ? 'patrol' : 'patrol');
-      showToast('已调阅规程向导，请核对排气/巡检前置条件');
+      selectSopWorkflow(activeAgentId === 'cryo_ccr' ? 'run' : 'patrol');
+      showToast('✅ 已切换至模块 4：请按规程核对排气与巡检前置条件');
     }
 
     async function agentWriteShiftLog() {
       if (currentUser.role === 'viewer') return showToast('⚠️ 权限拦截：只读观察员无权录入值班流水');
       const profile = agentProfiles[activeAgentId];
+      const button = document.querySelector('#view-agent [onclick="agentWriteShiftLog()"]');
+      if (button) { button.disabled = true; button.classList.add('opacity-60'); }
       try {
-        await apiRequest('/shift-logs', {
+        const createdLog = await apiRequest('/shift-logs', {
           method: 'POST',
           body: {
             category: '运行报警',
             target: profile.target,
             content: profile.logContent,
-            severity: activeAgentId === 'hydrogen' ? '重要' : '一般',
+            severity: activeAgentId === 'd2o_h2' ? '重要' : '一般',
             status: '跟进中',
             author_name: currentUser.name || '智能Agent中枢'
           }
         });
+        if (!shiftLogs.some(item => String(item.id) === String(createdLog.id))) {
+          shiftLogs.unshift(createdLog);
+          renderShiftLogs();
+        }
         await refreshAllData();
-        showToast('Agent 结论已记入本班值班流水，已联动模块 1');
+        showToast('✅ 已写入本班值班流水，并同步至模块 1');
       } catch (error) {
         showToast(`⚠️ ${error.message}`);
+      } finally {
+        if (button) { button.disabled = false; button.classList.remove('opacity-60'); }
       }
+    }
+
+    function typeAgentResponse(panel, header, body, redline) {
+      if (agentTypingTimer) clearInterval(agentTypingTimer);
+      panel.classList.remove('hidden');
+      panel.innerHTML = `<div class="flex items-start gap-2">
+        <i class="ph ph-robot text-sky-400 text-base shrink-0 mt-0.5"></i>
+        <div class="min-w-0 flex-1">
+          <div class="text-[9px] text-sky-400/80 font-mono mb-1">${escapePdfText(header)}</div>
+          <div><span id="agentTypingText" class="agent-typing-caret"></span></div>
+          <div id="agentTypingAdvice" class="text-rose-300 font-semibold mt-1.5 hidden">安全红线：${escapePdfText(redline)}</div>
+        </div>
+      </div>`;
+      const output = panel.querySelector('#agentTypingText');
+      let index = 0;
+      agentTypingTimer = setInterval(() => {
+        index = Math.min(index + 3, body.length);
+        output.textContent = body.slice(0, index);
+        if (index >= body.length) {
+          clearInterval(agentTypingTimer);
+          agentTypingTimer = null;
+          output.classList.remove('agent-typing-caret');
+          const advice = panel.querySelector('#agentTypingAdvice');
+          if (advice) advice.classList.remove('hidden');
+        }
+      }, 28);
     }
 
     function handleAgentQuestion(event) {
@@ -2585,10 +3308,42 @@
       const profile = agentProfiles[activeAgentId];
       const panel = document.getElementById('agentAnswerPanel');
       if (panel) {
-        panel.classList.remove('hidden');
-        panel.innerHTML = `<div class="flex items-start gap-2"><i class="ph ph-robot text-sky-400 text-base shrink-0 mt-0.5"></i><div><div class="text-[10px] text-sky-400/80 font-mono mb-1">${escapePdfText(profile.version)} · HEPAI AGENT</div><div>${escapePdfText(question)}<br><span class="text-slate-400 mt-1 inline-block">建议处置：${escapePdfText(profile.advice)}</span><br><span class="text-rose-300 font-semibold mt-1 inline-block">安全红线：${escapePdfText(profile.redline)}</span></div></div></div>`;
+        const answer = buildAgentAnswer(profile, question);
+        typeAgentResponse(panel, `${profile.version} · HEPAI AGENT · ${question}`, answer, profile.redline);
       }
       if (input) input.value = '';
+    }
+
+    function buildAgentAnswer(profile, question) {
+      const baseAnswer = profile.answer || profile.advice;
+      if (activeAgentId !== 'd2o_h2') return baseAnswer;
+      if (/通知|联系|找谁|半小时/.test(question)) {
+        return '若在线排气 30 分钟后氢浓度仍未回落至 3.0% 以下，请立即联系水冷专业组（梁辉宏 / 何宁），并同步报备值班长；同时向加速器总控申请机时预警，准备评估降功率。现场继续监视缓冲罐压力与排气阀反馈，严禁提前关闭排气。';
+      }
+      if (/降功率|降束流|停机|功率/.test(question)) {
+        return '当前氢浓度 3.82%，尚未触及 4.2% 的刚性停供束红线，现阶段无需立即申请降功率。请优先按在线排气规程点动开启排气阀至 15%，并保持 200kW 工况连续观察 30 分钟；若浓度突破 4.1% 或罐压快速升至 0.15MPa 以上，再申请降功率并通知水冷组。';
+      }
+      if (/压差|水压|一次水|影响/.test(question)) {
+        return '重水波动箱属于气相缓冲腔，15% 阀位微量排气对一次水回路循环泵进出口压差的瞬态扰动通常小于 0.005MPa，不会触发流量低联锁。排气期间仍需监视主泵压差与回水温度，若出现持续偏离包络线则暂停排气并复核阀门开度。';
+      }
+      if (/排气阀|开位|核实|泄漏/.test(question)) {
+        return '请在 OPI 上核对排气阀指令位与反馈位一致，并到就地确认阀门开度指示与管线无微漏；点动至 15% 后观察缓冲罐压力是否平滑下降。若反馈位与指令位偏差超过 2%，立即停止操作并通知仪控专业组检查执行机构。';
+      }
+      if (/持续上升|继续涨|怎么办|应对/.test(question)) {
+        return '继续上升时先保持排气通道畅通并缩短采样观察窗口至 5 分钟；若 30 分钟内未回落至 3.0% 以下，升级为重要工单并通知水冷专业组。若突破 4.2% 或罐压超过 0.15MPa，立即申请暂停打靶供束，严禁关闭排气或现场动火检修。';
+      }
+      return baseAnswer;
+    }
+
+    function askAgentQuick(question) {
+      const input = document.getElementById('agentQuestionInput');
+      if (input) input.value = question;
+      handleAgentQuestion({ preventDefault() {} });
+    }
+
+    function toggleAgentDiagnostic(card) {
+      if (!card.classList.contains('agent-diagnostic-card')) return;
+      card.classList.toggle('agent-card-collapsed');
     }
 
     // Toggle Day/Night Shift mode
@@ -4055,6 +4810,464 @@
     }
 
     // ==========================================
+    // MODULE 3: 谱仪协助工作台账 (SPECTROMETER ASSISTANCE LOG)
+    // ==========================================
+    let assistRecords = [];
+    let assistCategories = [];
+    let currentAssistSubTab = 'all';
+    let assistDateSortDirection = 'none';
+    const assistOperatorRoster = ['王健威', '王征', '汪静', '钟嘉充', '叶培钊', '周科', '徐锦鸿', '张文翔', '曾智蓉', '黄清辉'];
+    let selectedAssistOperators = ['王健威', '王征'];
+    let assistSpectrometerList = [
+      'GPPD谱仪', '大气谱仪', '高压谱仪', '成像谱仪', '高能非弹谱仪', '多物理谱仪', '小角散射谱仪', '实验公用系统'
+    ];
+
+    function escapeAssistHtml(value) {
+      return String(value == null ? '' : value)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+    }
+
+    async function loadAssistData() {
+      try {
+        const [records, categories] = await Promise.all([
+          apiRequest('/spectrometer-assists'),
+          apiRequest('/spectrometer-assists/categories')
+        ]);
+        assistCategories = Array.isArray(categories) ? categories : [];
+        assistRecords = Array.isArray(records) ? records : [];
+        if (currentAssistSubTab !== 'all' && !assistCategories.some(item => item.id === currentAssistSubTab)) {
+          currentAssistSubTab = 'all';
+        }
+        syncAssistSpectrometers();
+        renderAssistCategoryTabs();
+        renderAssistCategoryOptions();
+        renderAssistTable();
+        updateAssistMetricCounts();
+        updateAssistDateSortUI();
+      } catch (error) {
+        const tbody = document.getElementById('assistTableBody');
+        if (tbody) {
+          tbody.innerHTML = `<tr><td colspan="9" class="py-10 text-center text-rose-300">台账加载失败：${escapeAssistHtml(error.message)}</td></tr>`;
+        }
+        showToast(`⚠️ 协助台账加载失败：${error.message}`);
+      }
+    }
+
+    function syncAssistSpectrometers() {
+      assistRecords.forEach(record => {
+        const name = String(record.spec || '').trim();
+        if (name && !assistSpectrometerList.includes(name)) assistSpectrometerList.push(name);
+      });
+      renderAssistSpectrometerOptions();
+    }
+
+    function renderAssistCategoryTabs() {
+      const container = document.getElementById('assistTabsContainer');
+      if (!container) return;
+      const totalCount = assistRecords.length;
+      let html = `
+        <button onclick="selectAssistSubTab('all')" id="tab-btn-all" class="sub-tab-btn px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-all flex items-center gap-1.5 ${currentAssistSubTab === 'all' ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 shadow-sm' : 'bg-slate-950/70 text-slate-400 hover:text-slate-200 border border-slate-800'}">
+          <i class="ph ph-squares-four text-sm"></i>
+          <span>全部协助</span>
+          <span class="px-1.5 py-0.2 rounded text-[10px] font-mono bg-black/40 text-emerald-400 font-bold" id="badge-tab-all">${totalCount}</span>
+        </button>`;
+
+      assistCategories.forEach(cat => {
+        const count = assistRecords.filter(record => record.category === cat.id).length;
+        const isActive = currentAssistSubTab === cat.id;
+        const safeId = escapeAssistHtml(cat.id);
+        html += `
+          <button onclick="selectAssistSubTab('${safeId}')" id="tab-btn-${safeId}" class="sub-tab-btn px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-all flex items-center gap-1.5 ${isActive ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 shadow-sm' : 'bg-slate-950/70 text-slate-400 hover:text-slate-200 border border-slate-800'}">
+            <span>${escapeAssistHtml(cat.badge || '')}</span>
+            <span>${escapeAssistHtml(cat.name)}</span>
+            <span class="px-1.5 py-0.2 rounded text-[10px] font-mono bg-black/40 text-emerald-400 font-bold" id="badge-tab-${safeId}">${count}</span>
+          </button>`;
+      });
+
+      html += `
+        <button id="btnAddAssistCategory" onclick="promptAddNewCategory()" class="px-2.5 py-1.5 rounded-lg text-xs font-medium text-emerald-400 hover:text-white bg-emerald-950/40 hover:bg-emerald-900/60 border border-dashed border-emerald-600/50 flex items-center gap-1 shrink-0 transition-all ml-1 disabled:opacity-45 disabled:cursor-not-allowed" title="增加新的协助业务分类">
+          <i class="ph ph-plus font-bold"></i>
+          <span>新增分类</span>
+        </button>`;
+      container.innerHTML = html;
+      applyAssistPermissions();
+    }
+
+    function selectAssistSubTab(categoryId) {
+      currentAssistSubTab = categoryId;
+      renderAssistCategoryTabs();
+      const bannerDesc = document.getElementById('subTabDescText');
+      if (bannerDesc) {
+        if (categoryId === 'all') {
+          bannerDesc.innerText = '显示全部谱仪协助工作台账明细，数据支持向下依次录入累加。';
+        } else {
+          const found = assistCategories.find(category => category.id === categoryId);
+          bannerDesc.innerText = found ? (found.desc || `【${found.name}】相关协助工作台账明细`) : '谱仪协助工作台账明细';
+        }
+      }
+      renderAssistTable();
+    }
+
+    function renderAssistCategoryOptions() {
+      const container = document.getElementById('modalCategoryRadiosContainer');
+      if (!container) return;
+      if (!assistCategories.length) {
+        container.innerHTML = '<span class="text-slate-500 text-[11px]">暂无业务分类</span>';
+        return;
+      }
+      const selected = currentAssistSubTab !== 'all' ? currentAssistSubTab : assistCategories[0].id;
+      container.innerHTML = assistCategories.map(cat => `
+        <label class="flex items-center gap-2 px-2.5 py-2 rounded-lg bg-slate-950/70 border border-slate-700/80 hover:border-emerald-500/40 cursor-pointer min-w-0">
+          <input type="radio" name="assistCategory" value="${escapeAssistHtml(cat.id)}" ${cat.id === selected ? 'checked' : ''} class="text-emerald-500 focus:ring-0">
+          <span class="text-xs text-slate-200 truncate">${escapeAssistHtml(cat.badge || '')} ${escapeAssistHtml(cat.name)}</span>
+        </label>`).join('');
+    }
+
+    function renderAssistSpectrometerOptions(selectedValue) {
+      const select = document.getElementById('modalInputSpectrometer');
+      if (!select) return;
+      const current = selectedValue || select.value;
+      select.innerHTML = assistSpectrometerList.map(name => `
+        <option value="${escapeAssistHtml(name)}">${escapeAssistHtml(name)}</option>`).join('');
+      if (current && assistSpectrometerList.includes(current)) select.value = current;
+    }
+
+    function renderAssistOperatorChips() {
+      const container = document.getElementById('operatorChipsContainer');
+      const echo = document.getElementById('selectedOperatorsEcho');
+      const hidden = document.getElementById('modalInputOperators');
+      if (!container) return;
+      const echoText = selectedAssistOperators.length ? selectedAssistOperators.join('、') : '未选择 (请点击勾选)';
+      if (echo) echo.innerText = echoText;
+      if (hidden) hidden.value = selectedAssistOperators.length ? selectedAssistOperators.join('、') : '';
+      container.innerHTML = assistOperatorRoster.map(name => {
+        const isSelected = selectedAssistOperators.includes(name);
+        return `<button type="button" onclick="toggleAssistOperator('${escapeAssistHtml(name)}')" class="py-1 px-1.5 rounded text-[11px] font-medium transition-all text-center truncate ${isSelected ? 'bg-emerald-600 text-white font-bold shadow-sm shadow-emerald-600/40 border border-emerald-400' : 'bg-slate-900 text-slate-400 hover:text-slate-200 border border-slate-700/80 hover:border-slate-600'}">
+          ${isSelected ? '✓ ' : ''}${escapeAssistHtml(name)}
+        </button>`;
+      }).join('');
+    }
+
+    function toggleAssistOperator(name) {
+      if (!assistOperatorRoster.includes(name)) return;
+      if (selectedAssistOperators.includes(name)) {
+        selectedAssistOperators = selectedAssistOperators.filter(item => item !== name);
+      } else {
+        selectedAssistOperators.push(name);
+      }
+      renderAssistOperatorChips();
+    }
+
+    function openAddAssistModal() {
+      if (currentUser.role === 'viewer') return showToast('⚠️ 权限拦截：只读观察员不可登记协助台账');
+      if (!assistCategories.length) return showToast('请先新增业务分类后再登记');
+      renderAssistCategoryOptions();
+      renderAssistSpectrometerOptions();
+      renderAssistOperatorChips();
+      document.getElementById('modalAddAssist').classList.remove('hidden');
+    }
+
+    function closeAddAssistModal() {
+      document.getElementById('modalAddAssist').classList.add('hidden');
+    }
+
+    async function handleFormSubmitAssist(event) {
+      event.preventDefault();
+      if (currentUser.role === 'viewer') return showToast('⚠️ 权限拦截：只读观察员不可登记协助台账');
+      const button = document.getElementById('btnSubmitAssist');
+      const categoryRadio = document.querySelector('input[name="assistCategory"]:checked');
+      const shiftRadio = document.querySelector('input[name="modalInputShift"]:checked');
+      const operators = document.getElementById('modalInputOperators').value.trim();
+      const payload = {
+        category_id: categoryRadio ? categoryRadio.value : (assistCategories[0] || {}).id,
+        action_content: document.getElementById('modalInputContent').value.trim(),
+        spectrometer: document.getElementById('modalInputSpectrometer').value,
+        shift_type: shiftRadio ? shiftRadio.value : '白班',
+        count_val: document.getElementById('modalInputCount').value.trim() || '1',
+        op_date: document.getElementById('modalInputDate').value.trim(),
+        operators,
+        notes: document.getElementById('modalInputNotes').value.trim()
+      };
+      if (!payload.category_id || !payload.action_content || !payload.spectrometer || !operators) {
+        return showToast('请完整填写业务分类、操作内容、谱仪系统与操作人');
+      }
+      if (button) { button.disabled = true; button.innerText = '正在写入台账...'; }
+      try {
+        const created = await apiRequest('/spectrometer-assists', { method: 'POST', body: payload });
+        assistRecords.push(created);
+        assistRecords.sort((a, b) => a.id - b.id);
+        syncAssistSpectrometers();
+        renderAssistTable();
+        renderAssistCategoryTabs();
+        updateAssistMetricCounts();
+        closeAddAssistModal();
+        document.getElementById('modalInputContent').value = '';
+        document.getElementById('modalInputNotes').value = '';
+        showToast(`✅ 已成功追加第 ${created.id} 条谱仪协助记录 (${created.operators})`);
+      } catch (error) {
+        showToast(`⚠️ ${error.message}`);
+      } finally {
+        if (button) { button.disabled = false; button.innerText = '确认追加到台账'; }
+      }
+    }
+
+    function parseAssistDateToTime(value) {
+      const match = String(value || '').match(/^(\d{4})\/(\d{1,2})\/(\d{1,2})$/);
+      if (!match) return 0;
+      return new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3])).getTime();
+    }
+
+    function toggleDateSort() {
+      if (assistDateSortDirection === 'none') {
+        assistDateSortDirection = 'desc';
+        showToast('已按操作时间【降序排列 (最新在前 ↓)】');
+      } else if (assistDateSortDirection === 'desc') {
+        assistDateSortDirection = 'asc';
+        showToast('已按操作时间【升序排列 (最早在前 ↑)】');
+      } else {
+        assistDateSortDirection = 'none';
+        showToast('已恢复默认录入顺序');
+      }
+      updateAssistDateSortUI();
+      renderAssistTable();
+    }
+
+    function updateAssistDateSortUI() {
+      const icon = document.getElementById('dateSortIcon');
+      const badge = document.getElementById('dateSortBadge');
+      const wrapper = document.getElementById('dateSortIconWrapper');
+      if (!icon || !badge || !wrapper) return;
+      if (assistDateSortDirection === 'desc') {
+        icon.className = 'ph ph-arrow-down font-bold text-xs';
+        badge.innerText = '最新↓';
+        badge.className = 'text-[10px] font-mono px-1 rounded bg-amber-500/30 text-amber-200 border border-amber-500/40';
+        wrapper.className = 'inline-flex items-center p-0.5 rounded bg-amber-500/20 border border-amber-400 text-amber-300';
+      } else if (assistDateSortDirection === 'asc') {
+        icon.className = 'ph ph-arrow-up font-bold text-xs';
+        badge.innerText = '最早↑';
+        badge.className = 'text-[10px] font-mono px-1 rounded bg-sky-500/30 text-sky-200 border border-sky-500/40';
+        wrapper.className = 'inline-flex items-center p-0.5 rounded bg-sky-500/20 border border-sky-400 text-sky-300';
+      } else {
+        icon.className = 'ph ph-arrows-down-up text-xs font-bold';
+        badge.innerText = '默认';
+        badge.className = 'text-[10px] font-mono px-1 rounded bg-black/40 text-emerald-300/80';
+        wrapper.className = 'inline-flex items-center p-0.5 rounded bg-emerald-950/70 border border-emerald-500/40 text-emerald-300';
+      }
+    }
+
+    function getFilteredAssistRecords() {
+      const shiftSelect = document.getElementById('filterShiftSelect');
+      const keywordInput = document.getElementById('filterKeyword');
+      const shiftFilter = shiftSelect ? shiftSelect.value : 'all';
+      const keyword = keywordInput ? keywordInput.value.trim().toLowerCase() : '';
+      let filtered = assistRecords.filter(record => {
+        if (currentAssistSubTab !== 'all' && record.category !== currentAssistSubTab) return false;
+        if (shiftFilter !== 'all' && record.shift !== shiftFilter) return false;
+        if (keyword) {
+          const haystack = `${record.action} ${record.spec} ${record.operators} ${record.notes} ${record.date}`.toLowerCase();
+          if (!haystack.includes(keyword)) return false;
+        }
+        return true;
+      });
+      if (assistDateSortDirection === 'desc') {
+        filtered = filtered.slice().sort((a, b) => {
+          const delta = parseAssistDateToTime(b.date) - parseAssistDateToTime(a.date);
+          return delta !== 0 ? delta : b.id - a.id;
+        });
+      } else if (assistDateSortDirection === 'asc') {
+        filtered = filtered.slice().sort((a, b) => {
+          const delta = parseAssistDateToTime(a.date) - parseAssistDateToTime(b.date);
+          return delta !== 0 ? delta : a.id - b.id;
+        });
+      }
+      return filtered;
+    }
+
+    function renderAssistTable() {
+      const tbody = document.getElementById('assistTableBody');
+      if (!tbody) return;
+      const filtered = getFilteredAssistRecords();
+      const countInfo = document.getElementById('subTabCountInfo');
+      if (countInfo) countInfo.innerText = `匹配 ${filtered.length} 条记录 (总计 ${assistRecords.length} 项)`;
+      if (!filtered.length) {
+        tbody.innerHTML = `
+          <tr><td colspan="9" class="py-12 text-center text-slate-500">
+            <i class="ph ph-magnifying-glass text-2xl block mb-2 opacity-50"></i>
+            未检索到符合条件的谱仪协助记录
+          </td></tr>`;
+        updateAssistMetricCounts();
+        return;
+      }
+      const canDelete = currentUser.role === 'admin';
+      tbody.innerHTML = filtered.map(record => {
+        const shiftBadge = record.shift === '夜班'
+          ? '<span class="px-2 py-0.5 rounded text-[11px] font-semibold bg-sky-500/15 text-sky-300 border border-sky-500/30">夜班</span>'
+          : '<span class="px-2 py-0.5 rounded text-[11px] font-semibold bg-amber-500/15 text-amber-300 border border-amber-500/30">白班</span>';
+        let specColor = 'text-slate-300';
+        if (record.spec.includes('大气')) specColor = 'text-amber-300 font-semibold';
+        if (record.spec.includes('GPPD')) specColor = 'text-cyan-300 font-semibold';
+        if (record.spec.includes('高压')) specColor = 'text-emerald-300 font-semibold';
+        return `
+          <tr class="transition-colors">
+            <td class="py-2.5 px-3 text-center font-mono font-bold text-slate-400 bg-slate-900/30">${record.id}</td>
+            <td class="py-2.5 px-4 font-medium text-white">${escapeAssistHtml(record.action)}</td>
+            <td class="py-2.5 px-3 ${specColor}">${escapeAssistHtml(record.spec)}</td>
+            <td class="py-2.5 px-3 text-center">${shiftBadge}</td>
+            <td class="py-2.5 px-3 text-center font-mono font-bold text-emerald-400">${escapeAssistHtml(record.count || '-')}</td>
+            <td class="py-2.5 px-3 text-center font-mono text-slate-300">${escapeAssistHtml(record.date)}</td>
+            <td class="py-2.5 px-4 text-slate-200 font-medium">${escapeAssistHtml(record.operators)}</td>
+            <td class="py-2.5 px-4 text-slate-400 text-[11px] truncate max-w-[160px]">${escapeAssistHtml(record.notes || '-')}</td>
+            <td class="py-2.5 px-2 text-center">
+              ${canDelete
+                ? `<button onclick="deleteAssistRecord(${record.id})" class="text-slate-400 hover:text-rose-400 p-1 rounded hover:bg-rose-500/10 transition-colors" title="删除该条记录"><i class="ph ph-trash text-sm"></i></button>`
+                : '<span class="text-[10px] text-slate-600">只读</span>'}
+            </td>
+          </tr>`;
+      }).join('');
+      updateAssistMetricCounts();
+    }
+
+    async function deleteAssistRecord(recordId) {
+      if (currentUser.role !== 'admin') return showToast('⚠️ 权限拦截：仅系统管理员可删除台账记录');
+      if (!window.confirm(`确认要删除序号为 ${recordId} 的谱仪协助记录吗？`)) return;
+      try {
+        await apiRequest(`/spectrometer-assists/${recordId}`, { method: 'DELETE' });
+        assistRecords = assistRecords.filter(record => record.id !== recordId);
+        renderAssistTable();
+        renderAssistCategoryTabs();
+        updateAssistMetricCounts();
+        showToast(`已删除序号 ${recordId} 记录`);
+      } catch (error) {
+        showToast(`⚠️ ${error.message}`);
+      }
+    }
+
+    function updateAssistMetricCounts() {
+      const total = assistRecords.length;
+      const countBy = key => assistRecords.filter(record => record.category === key).length;
+      const setText = (id, value) => {
+        const element = document.getElementById(id);
+        if (element) element.innerText = String(value);
+      };
+      setText('statTotalCount', total);
+      setText('statSampleCount', countBy('sample'));
+      setText('statAnisCount', countBy('anis'));
+      setText('statOtherCount', countBy('other'));
+      setText('navAssistTotalBadge', `${total}条`);
+      assistCategories.forEach(category => {
+        const badge = document.getElementById(`badge-tab-${category.id}`);
+        if (badge) badge.innerText = String(countBy(category.id));
+      });
+      const allBadge = document.getElementById('badge-tab-all');
+      if (allBadge) allBadge.innerText = String(total);
+    }
+
+    function exportAssistCSV() {
+      const rows = getFilteredAssistRecords();
+      const escapeCsvCell = value => `"${String(value == null ? '' : value).replace(/"/g, '""')}"`;
+      const lines = ['序号,操作内容,所属谱仪/系统,白/夜班,次数,操作时间,操作人,备注'];
+      rows.forEach(record => {
+        lines.push([
+          record.id,
+          escapeCsvCell(record.action),
+          escapeCsvCell(record.spec),
+          escapeCsvCell(record.shift),
+          escapeCsvCell(record.count),
+          escapeCsvCell(record.date),
+          escapeCsvCell(record.operators),
+          escapeCsvCell(record.notes)
+        ].join(','));
+      });
+      const blob = new Blob(['\uFEFF' + lines.join('\r\n')], { type: 'text/csv;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `CSNS_谱仪协助工作台账_${new Date().toISOString().slice(0, 10)}.csv`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+      showToast(`📥 已导出 ${rows.length} 条谱仪协助记录 (UTF-8 BOM)`);
+    }
+
+    function promptAddNewCategory() {
+      if (currentUser.role === 'viewer') return showToast('⚠️ 权限拦截：只读观察员不可新增业务分类');
+      const input = document.getElementById('newCategoryInputName');
+      if (input) input.value = '';
+      document.getElementById('modalCustomCategory').classList.remove('hidden');
+    }
+
+    function closeCustomCategoryModal() {
+      document.getElementById('modalCustomCategory').classList.add('hidden');
+    }
+
+    async function confirmAddCategory() {
+      if (currentUser.role === 'viewer') return showToast('⚠️ 权限拦截：只读观察员不可新增业务分类');
+      const input = document.getElementById('newCategoryInputName');
+      const name = input ? input.value.trim() : '';
+      if (!name) return showToast('请输入新分类名称');
+      if (assistCategories.some(category => category.name === name)) return showToast('该分类名称已存在');
+      try {
+        const created = await apiRequest('/spectrometer-assists/categories', {
+          method: 'POST',
+          body: { name, badge: '📌', description: `【${name}】相关谱仪与辅助系统现场作业台账记录。` }
+        });
+        assistCategories.push(created);
+        closeCustomCategoryModal();
+        renderAssistCategoryTabs();
+        selectAssistSubTab(created.id);
+        showToast(`✅ 已新增业务分类【${created.name}】`);
+      } catch (error) {
+        showToast(`⚠️ ${error.message}`);
+      }
+    }
+
+    function promptAddNewSpectrometer() {
+      if (currentUser.role === 'viewer') return showToast('⚠️ 权限拦截：只读观察员不可新增谱仪系统');
+      const input = document.getElementById('newSpectrometerInputName');
+      if (input) input.value = '';
+      document.getElementById('modalCustomSpectrometer').classList.remove('hidden');
+    }
+
+    function closeCustomSpectrometerModal() {
+      document.getElementById('modalCustomSpectrometer').classList.add('hidden');
+    }
+
+    function confirmAddSpectrometer() {
+      if (currentUser.role === 'viewer') return showToast('⚠️ 权限拦截：只读观察员不可新增谱仪系统');
+      const input = document.getElementById('newSpectrometerInputName');
+      const name = input ? input.value.trim() : '';
+      if (!name) return showToast('请输入新谱仪或系统名称');
+      if (!assistSpectrometerList.includes(name)) assistSpectrometerList.push(name);
+      renderAssistSpectrometerOptions(name);
+      closeCustomSpectrometerModal();
+      showToast(`✅ 已新增并选中【${name}】`);
+    }
+
+    function applyAssistPermissions() {
+      const isViewer = currentUser.role === 'viewer';
+      const isAdmin = currentUser.role === 'admin';
+      [document.getElementById('btnOpenAddAssist'), document.getElementById('btnAddAssistCategory')].forEach(button => {
+        if (!button) return;
+        button.disabled = isViewer;
+        button.classList.toggle('opacity-45', isViewer);
+        button.classList.toggle('cursor-not-allowed', isViewer);
+        button.title = isViewer ? '仅值班员/管理员可用' : '';
+      });
+      const submit = document.getElementById('btnSubmitAssist');
+      if (submit) submit.disabled = isViewer;
+      if (!isAdmin) {
+        document.querySelectorAll('#assistTableBody button[onclick^="deleteAssistRecord"]').forEach(button => {
+          button.classList.add('hidden');
+        });
+      }
+    }
+
+    // ==========================================
     // TOAST UTILITY
     // ==========================================
     function showToast(msg) {
@@ -4301,6 +5514,7 @@
         applySessionUser(me);
         hydrateFromBootstrap(data);
         await loadLogTargets();
+        await loadAssistData();
         if (data.forecast) {
           beamForecast = {
             type: data.forecast.type,
@@ -4333,6 +5547,8 @@
       renderKanban();
       renderNavCards();
       renderBeamForecastUI();
+      renderAssistCategoryTabs();
+      renderAssistTable();
       applyRolePermissions(currentUser.role);
     }
 

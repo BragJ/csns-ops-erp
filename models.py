@@ -206,3 +206,35 @@ class ShiftHandover(Base):
     status: Mapped[str] = mapped_column(String(20), default="archived", index=True, nullable=False)
 
     shift: Mapped["DutyShift"] = relationship(back_populates="handovers")
+
+
+class SpectrometerAssistCategory(Base):
+    __tablename__ = "spectrometer_assist_categories"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    category_id: Mapped[str] = mapped_column(String(60), unique=True, index=True, nullable=False)
+    name: Mapped[str] = mapped_column(String(80), unique=True, index=True, nullable=False)
+    badge: Mapped[str] = mapped_column(String(16), default="📌", nullable=False)
+    description: Mapped[str] = mapped_column(Text, default="", nullable=False)
+    sort_order: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    is_system: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, nullable=False)
+
+
+class SpectrometerAssist(Base):
+    __tablename__ = "spectrometer_assists"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    category_id: Mapped[str] = mapped_column(
+        ForeignKey("spectrometer_assist_categories.category_id", ondelete="RESTRICT"),
+        index=True,
+        nullable=False,
+    )
+    action_content: Mapped[str] = mapped_column(Text, nullable=False)
+    spectrometer: Mapped[str] = mapped_column(String(160), index=True, nullable=False)
+    shift_type: Mapped[str] = mapped_column(String(10), index=True, nullable=False)
+    count_val: Mapped[str] = mapped_column(String(20), default="1", nullable=False)
+    op_date: Mapped[str] = mapped_column(String(20), index=True, nullable=False)
+    operators: Mapped[str] = mapped_column(String(300), nullable=False)
+    notes: Mapped[str] = mapped_column(Text, default="", nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, index=True, nullable=False)

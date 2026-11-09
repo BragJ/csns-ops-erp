@@ -8,7 +8,7 @@ from fastapi import Depends, FastAPI, HTTPException, Query, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, ConfigDict, Field
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session, selectinload
 
 from auth import (
@@ -29,6 +29,8 @@ from models import (
     LogTarget,
     NavItem,
     PatrolSlot,
+    SpectrometerAssist,
+    SpectrometerAssistCategory,
     ShiftHandover,
     ShiftLog,
     ShiftTodo,
@@ -51,6 +53,38 @@ DUTY_ROSTER = ["王征", "王健威", "周科", "黄淯辉", "张文翔", "曾�
 DAY_SLOT_TIMES = ["09:00", "12:00", "15:00"]
 NIGHT_SLOT_TIMES = ["18:00", "21:00", "00:00", "03:00", "06:00"]
 NAV_CATEGORIES = {"target_control", "spectrometer_run", "sample_env", "video_monitor"}
+ASSIST_CATEGORY_SEEDS = [
+    ("sample", "谱仪换样", "🧪", "谱仪低温换样板块：GPPD、高压谱仪等低温恒温器 CCR06 / CCR09 样品更换与双人复核。"),
+    ("anis", "大气谱仪", "🎯", "大气中子谱仪板块：散射室电动屏蔽铅门启闭、样品台多维对准及准直器工况调整。"),
+    ("other", "其它协助", "🛠️", "其它协作板块：谱仪 Run 异常重新起动、真空泵组保障、水系统辐射剂量核验等。"),
+]
+ASSIST_SEEDS = [
+    ("anis", "协助开关散射室屏蔽门", "大气谱仪", "夜班", "2", "2026/10/22", "王健威、王征", ""),
+    ("anis", "协助开关散射室屏蔽门", "大气谱仪", "白班", "1", "2026/10/23", "汪静", ""),
+    ("sample", "协助CCR06换样", "GPPD谱仪", "白班", "1", "2026/10/24", "钟嘉充", ""),
+    ("sample", "协助CCR06换样", "GPPD谱仪", "白班", "2", "2026/10/25", "王健威", ""),
+    ("other", "协助谱仪重新起run", "成像谱仪", "夜班", "1", "2026/10/26", "叶培钊", ""),
+    ("sample", "协助CCR06换样", "GPPD谱仪", "白班", "1", "2026/10/29", "周科", ""),
+    ("other", "协助真空泵组运行", "高能非弹谱仪", "夜班", "3", "2026/10/29", "徐锦鸿", ""),
+    ("sample", "协助CCR06换样", "GPPD谱仪", "白班", "2", "2026/10/30", "王征、王健威", ""),
+    ("other", "协助检查水系统辐射剂量监测曲线", "实验公用系统", "白班", "1", "2026/10/30", "王健威", ""),
+    ("anis", "协助谱仪工作", "大气谱仪", "白班", "", "2026/10/31", "张文翔、曾智蓉", ""),
+    ("sample", "协助CCR09换样", "高压谱仪", "夜班", "1", "2026/10/31", "叶培钊、钟嘉充", ""),
+    ("sample", "协助CCR06换样", "GPPD谱仪", "白班", "3", "2026/11/1", "徐锦鸿、汪静", ""),
+    ("sample", "协助CCR09换样", "高压谱仪", "白班", "1", "2026/11/1", "徐锦鸿、汪静", ""),
+    ("anis", "协助开关散射室屏蔽门", "大气谱仪", "夜班", "N", "2026/11/1", "王健威", ""),
+    ("other", "现场查看样品环境温度", "高压谱仪", "夜班", "1", "2026/11/1", "王征", ""),
+    ("anis", "协助开关散射室屏蔽门", "大气谱仪", "白班", "2", "2026/11/2", "周科", ""),
+    ("sample", "协助CCR09换样", "高压谱仪", "白班", "1", "2026/11/2", "黄清辉", ""),
+    ("sample", "协助CCR06换样", "GPPD谱仪", "白班", "1", "2026/11/2", "黄清辉", ""),
+    ("sample", "协助CCR09换样", "高压谱仪", "白班", "1", "2026/11/3", "叶培钊", ""),
+    ("anis", "协助开关散射室屏蔽门", "大气谱仪", "白班", "2", "2026/11/3", "钟嘉充", ""),
+    ("anis", "协助开关散射室屏蔽门", "大气谱仪", "夜班", "5", "2026/11/3", "徐锦鸿、汪静", ""),
+    ("anis", "独立更换样品、调整样品台、准直器工况", "大气谱仪", "夜班", "1", "2026/11/3", "徐锦鸿、汪静", ""),
+    ("sample", "协助CCR06换样", "GPPD谱仪", "夜班", "1", "2026/11/5", "叶培钊、钟嘉充", ""),
+    ("anis", "协助开关散射室屏蔽门", "大气谱仪", "夜班", "N", "2026/11/6", "王健威、王征", ""),
+    ("sample", "协助CCR09换样", "高压谱仪", "夜班", "1", "2026/11/6", "王征", ""),
+]
 
 
 def as_naive_utc(value: datetime) -> datetime:
@@ -253,6 +287,50 @@ def seed_database(db: Session) -> DutyShift:
                 is_active=True,
             )
         )
+
+    if db.scalar(select(SpectrometerAssistCategory).limit(1)) is None:
+        db.add_all(
+            [
+                SpectrometerAssistCategory(
+                    category_id=category_id,
+                    name=name,
+                    badge=badge,
+                    description=description,
+                    sort_order=(index + 1) * 10,
+                    is_system=True,
+                )
+                for index, (category_id, name, badge, description) in enumerate(ASSIST_CATEGORY_SEEDS)
+            ]
+        )
+        db.flush()
+
+    if db.scalar(select(SpectrometerAssist).limit(1)) is None:
+        db.add_all(
+            [
+                SpectrometerAssist(
+                    category_id=category_id,
+                    action_content=action,
+                    spectrometer=spectrometer,
+                    shift_type=shift_type,
+                    count_val=count_val,
+                    op_date=op_date,
+                    operators=operators,
+                    notes=notes,
+                    created_at=datetime(2026, 10, 22, 8, 0) + timedelta(hours=index * 6),
+                )
+                for index, (
+                    category_id,
+                    action,
+                    spectrometer,
+                    shift_type,
+                    count_val,
+                    op_date,
+                    operators,
+                    notes,
+                ) in enumerate(ASSIST_SEEDS)
+            ]
+        )
+
     db.commit()
     return db.scalar(select(DutyShift).where(DutyShift.status == "active").order_by(DutyShift.id.desc()))
 
@@ -387,6 +465,23 @@ class SopSubmitPayload(BaseModel):
     operator_name: str = Field(min_length=1, max_length=80)
 
 
+class AssistCreatePayload(BaseModel):
+    category_id: str = Field(min_length=1, max_length=60)
+    action_content: str = Field(min_length=1, max_length=500)
+    spectrometer: str = Field(min_length=1, max_length=160)
+    shift_type: Literal["白班", "夜班"]
+    count_val: str = Field(default="1", max_length=20)
+    op_date: str = Field(min_length=8, max_length=10)
+    operators: str = Field(min_length=1, max_length=300)
+    notes: str = Field(default="", max_length=1000)
+
+
+class AssistCategoryCreatePayload(BaseModel):
+    name: str = Field(min_length=1, max_length=80)
+    badge: str = Field(default="📌", max_length=16)
+    description: str = Field(default="", max_length=500)
+
+
 def user_dict(user: User) -> dict:
     return {
         "id": user.id,
@@ -504,6 +599,32 @@ def log_target_dict(item: LogTarget) -> dict:
         "name": item.name,
         "is_system": item.is_system,
         "sort_order": item.sort_order,
+        "created_at": iso(item.created_at),
+    }
+
+
+def assist_category_dict(item: SpectrometerAssistCategory) -> dict:
+    return {
+        "id": item.category_id,
+        "name": item.name,
+        "badge": item.badge,
+        "desc": item.description,
+        "sort_order": item.sort_order,
+        "is_system": item.is_system,
+    }
+
+
+def assist_dict(item: SpectrometerAssist) -> dict:
+    return {
+        "id": item.id,
+        "category": item.category_id,
+        "action": item.action_content,
+        "spec": item.spectrometer,
+        "shift": item.shift_type,
+        "count": item.count_val,
+        "date": item.op_date,
+        "operators": item.operators,
+        "notes": item.notes,
         "created_at": iso(item.created_at),
     }
 
@@ -998,6 +1119,116 @@ def list_nav_items(_user: User = Depends(get_current_user), db: Session = Depend
 def list_log_targets(_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     items = db.scalars(select(LogTarget).order_by(LogTarget.sort_order, LogTarget.id)).all()
     return [log_target_dict(item) for item in items]
+
+
+@app.get("/api/v1/spectrometer-assists/categories")
+def list_assist_categories(_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    items = db.scalars(
+        select(SpectrometerAssistCategory).order_by(SpectrometerAssistCategory.sort_order, SpectrometerAssistCategory.id)
+    ).all()
+    return [assist_category_dict(item) for item in items]
+
+
+@app.post("/api/v1/spectrometer-assists/categories", status_code=status.HTTP_201_CREATED)
+def create_assist_category(
+    payload: AssistCategoryCreatePayload,
+    _user: User = Depends(require_operator_or_admin),
+    db: Session = Depends(get_db),
+):
+    name = payload.name.strip()
+    if not name:
+        raise HTTPException(status_code=422, detail="分类名称不能为空")
+    duplicate = db.scalar(
+        select(SpectrometerAssistCategory).where(func.lower(SpectrometerAssistCategory.name) == name.lower())
+    )
+    if duplicate:
+        raise HTTPException(status_code=409, detail="该业务分类已存在")
+    max_order = db.scalar(select(func.max(SpectrometerAssistCategory.sort_order))) or 0
+    category_id = f"cat_{utcnow().strftime('%Y%m%d%H%M%S%f')}"
+    item = SpectrometerAssistCategory(
+        category_id=category_id,
+        name=name,
+        badge=(payload.badge.strip() or "📌")[:16],
+        description=payload.description.strip() or f"{name}板块相关谱仪与辅助系统现场作业台账记录。",
+        sort_order=max_order + 10,
+        is_system=False,
+    )
+    db.add(item)
+    db.commit()
+    return assist_category_dict(item)
+
+
+@app.get("/api/v1/spectrometer-assists")
+def list_spectrometer_assists(
+    category: Optional[str] = Query(default=None, max_length=60),
+    shift: Optional[Literal["白班", "夜班"]] = Query(default=None),
+    keyword: Optional[str] = Query(default=None, max_length=200),
+    _user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    statement = select(SpectrometerAssist).order_by(SpectrometerAssist.id)
+    if category and category != "all":
+        statement = statement.where(SpectrometerAssist.category_id == category)
+    if shift:
+        statement = statement.where(SpectrometerAssist.shift_type == shift)
+    if keyword and keyword.strip():
+        pattern = f"%{keyword.strip().lower()}%"
+        statement = statement.where(
+            or_(
+                func.lower(SpectrometerAssist.action_content).like(pattern),
+                func.lower(SpectrometerAssist.spectrometer).like(pattern),
+                func.lower(SpectrometerAssist.operators).like(pattern),
+                func.lower(SpectrometerAssist.notes).like(pattern),
+                func.lower(SpectrometerAssist.op_date).like(pattern),
+            )
+        )
+    return [assist_dict(item) for item in db.scalars(statement).all()]
+
+
+@app.post("/api/v1/spectrometer-assists", status_code=status.HTTP_201_CREATED)
+def create_spectrometer_assist(
+    payload: AssistCreatePayload,
+    _user: User = Depends(require_operator_or_admin),
+    db: Session = Depends(get_db),
+):
+    category = db.scalar(
+        select(SpectrometerAssistCategory).where(SpectrometerAssistCategory.category_id == payload.category_id)
+    )
+    if category is None:
+        raise HTTPException(status_code=422, detail="协助业务分类不存在")
+    try:
+        parsed_date = datetime.strptime(payload.op_date.strip(), "%Y/%m/%d")
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail="操作时间格式必须为 YYYY/MM/DD") from exc
+    operators = payload.operators.strip()
+    if not operators:
+        raise HTTPException(status_code=422, detail="请至少选择一位操作人")
+    item = SpectrometerAssist(
+        category_id=category.category_id,
+        action_content=payload.action_content.strip(),
+        spectrometer=payload.spectrometer.strip(),
+        shift_type=payload.shift_type,
+        count_val=payload.count_val.strip() or "1",
+        op_date=parsed_date.strftime("%Y/%m/%d"),
+        operators=operators,
+        notes=payload.notes.strip(),
+    )
+    db.add(item)
+    db.commit()
+    return assist_dict(item)
+
+
+@app.delete("/api/v1/spectrometer-assists/{assist_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_spectrometer_assist(
+    assist_id: int,
+    _admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    item = db.get(SpectrometerAssist, assist_id)
+    if item is None:
+        raise HTTPException(status_code=404, detail="协助记录不存在")
+    db.delete(item)
+    db.commit()
 
 
 @app.post("/api/v1/log-targets", status_code=status.HTTP_201_CREATED)
