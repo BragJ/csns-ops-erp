@@ -98,7 +98,7 @@ def iso(value: Optional[datetime]) -> Optional[str]:
 
 
 def display_time(value: Optional[datetime]) -> str:
-    return value.strftime("%H:%M:%S") if value else "--"
+    return value.strftime("%Y-%m-%d %H:%M") if value else "--"
 
 
 def display_minute(value: Optional[datetime]) -> str:

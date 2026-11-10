@@ -403,7 +403,7 @@
               <option value="供束打靶" selected>加速器 200kW, 25Hz 供束打靶 · 谱仪正常实验</option>
               <option value="停机维护">停机维护，无束流</option>
             </select>
-            <div class="mt-2 text-xs text-slate-400 font-mono" id="bannerShiftName">2026年11月04日 · 白班 (08:00 ~ 17:30)</div>
+            <div class="mt-2 text-xs text-slate-400 font-mono" id="bannerShiftName">--</div>
           </div>
 
           <!-- 值班岗位配置：三人班次（值班长+值班员10人下拉，坐班学生手填） -->
@@ -583,7 +583,7 @@
                 <table class="w-full text-left text-xs">
                   <thead class="text-slate-400 bg-slate-900/60 uppercase font-mono border-y border-slate-800">
                     <tr>
-                      <th class="py-2.5 px-3">时间</th>
+                      <th class="py-2.5 px-3 font-mono text-slate-400 whitespace-nowrap min-w-[125px]">时间</th>
                       <th class="py-2.5 px-3">分类/谱仪</th>
                       <th class="py-2.5 px-3">详情内容与现场征候</th>
                       <th class="py-2.5 px-3">状态</th>
@@ -2672,6 +2672,39 @@
     let isDayShift = true; // True: 白班 (08:00-17:30), False: 夜班 (17:30-08:00)
     let currentStudent = "张超月";
 
+    function formatLogDateTime(date = new Date()) {
+      const value = date instanceof Date ? date : new Date(date);
+      if (Number.isNaN(value.getTime())) return '';
+      const Y = value.getFullYear();
+      const M = String(value.getMonth() + 1).padStart(2, '0');
+      const D = String(value.getDate()).padStart(2, '0');
+      const hh = String(value.getHours()).padStart(2, '0');
+      const mm = String(value.getMinutes()).padStart(2, '0');
+      return `${Y}-${M}-${D} ${hh}:${mm}`;
+    }
+
+    function normalizeLogTime(value, occurredAt) {
+      if (occurredAt) {
+        const formatted = formatLogDateTime(occurredAt);
+        if (formatted) return formatted;
+      }
+      const text = String(value || '').trim();
+      if (/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}/.test(text)) return text.slice(0, 16);
+      const timeMatch = text.match(/^(\d{2}):(\d{2})(?::(\d{2}))?$/);
+      if (timeMatch) return `${formatLogDateTime().slice(0, 10)} ${timeMatch[1]}:${timeMatch[2]}`;
+      return text;
+    }
+
+    function updateShiftBannerTime() {
+      const now = new Date();
+      const Y = now.getFullYear();
+      const M = String(now.getMonth() + 1).padStart(2, '0');
+      const D = String(now.getDate()).padStart(2, '0');
+      const bannerDate = `${Y}年${M}月${D}日`;
+      const shiftText = isDayShift ? '白班 (08:00 ~ 17:30)' : '夜班 (17:30 ~ 次日 08:00)';
+      setSafeText('bannerShiftName', `${bannerDate} · ${shiftText}`);
+    }
+
     // 运行组 10 位在岗值班人员名单（对应 5 组轮班体系）
     const dutyRoster10 = [
       "王征", "王健威",
@@ -2706,12 +2739,12 @@
 
     // 3. 运行日志流水账 (4项清晰业务分类：运行报警, 现场巡查, 待办琐事, 谱仪协助)
     let shiftLogs = [
-      { id: 101, time: "16:45:12", category: "运行报警", target: "多物理谱仪 (MPI)", content: "重水保护气缓冲罐压力微幅攀升，已越过预警限 0.12 MPa，现场复核微漏点。", level: "重要", status: "跟进中", author: "王健威" },
-      { id: 102, time: "15:00:20", category: "现场巡查", target: "靶站综合大厅", content: "15:00 现场例行巡检完成：未见异常，主回路温度压力平稳。", level: "一般", status: "已闭环", author: "王健威" },
-      { id: 103, time: "14:10:33", category: "运行报警", target: "低温样品环境 CCR", content: "CCR-05 换样抽真空超 20 分钟保持在 72 Pa (>50 Pa 门槛)，启动止损拦截，未开分子泵。", level: "紧急", status: "待处理", author: "王健威" },
-      { id: 104, time: "12:00:15", category: "现场巡查", target: "靶站综合大厅", content: "12:00 现场例行巡查完成：未见异常。203、204实验室无异常。", level: "一般", status: "已闭环", author: "王健威" },
-      { id: 105, time: "09:00:10", category: "现场巡查", target: "靶站综合大厅", content: "09:00 现场巡查完成，未见异常。", level: "一般", status: "已闭环", author: "王健威" },
-      { id: 106, time: "08:00:00", category: "待办琐事", target: "靶站中控室", content: "接班完毕。加速器 200kW, 25Hz 供束打靶，谱仪正常实验。", level: "一般", status: "已闭环", author: "王征" }
+      { id: 101, time: "2026-11-04 16:45", category: "运行报警", target: "多物理谱仪 (MPI)", content: "重水保护气缓冲罐压力微幅攀升，已越过预警限 0.12 MPa，现场复核微漏点。", level: "重要", status: "跟进中", author: "王健威" },
+      { id: 102, time: "2026-11-04 15:00", category: "现场巡查", target: "靶站综合大厅", content: "15:00 现场例行巡检完成：未见异常，主回路温度压力平稳。", level: "一般", status: "已闭环", author: "王健威" },
+      { id: 103, time: "2026-11-04 14:10", category: "运行报警", target: "低温样品环境 CCR", content: "CCR-05 换样抽真空超 20 分钟保持在 72 Pa (>50 Pa 门槛)，启动止损拦截，未开分子泵。", level: "紧急", status: "待处理", author: "王健威" },
+      { id: 104, time: "2026-11-04 12:00", category: "现场巡查", target: "靶站综合大厅", content: "12:00 现场例行巡查完成：未见异常。203、204实验室无异常。", level: "一般", status: "已闭环", author: "王健威" },
+      { id: 105, time: "2026-11-04 09:00", category: "现场巡查", target: "靶站综合大厅", content: "09:00 现场巡查完成，未见异常。", level: "一般", status: "已闭环", author: "王健威" },
+      { id: 106, time: "2026-11-04 08:00", category: "待办琐事", target: "靶站中控室", content: "接班完毕。加速器 200kW, 25Hz 供束打靶，谱仪正常实验。", level: "一般", status: "已闭环", author: "王征" }
     ];
 
     // 4. 事件看板数据
@@ -2957,6 +2990,7 @@
     // INITIALIZATION & TAB SWITCHING
     // ==========================================
     window.onload = function() {
+      updateShiftBannerTime();
       initClock();
     };
 
@@ -2966,10 +3000,12 @@
     }
 
     function initClock() {
+      updateShiftBannerTime();
       setInterval(() => {
         const now = new Date();
         setSafeText('liveClock', now.toTimeString().split(' ')[0]);
-        setSafeText('liveDate', now.toISOString().split('T')[0]);
+        setSafeText('liveDate', `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`);
+        updateShiftBannerTime();
       }, 1000);
     }
 
@@ -3360,6 +3396,8 @@
         method: 'POST',
         body: { shift_type: isDayShift ? 'night' : 'day' }
       }).then(() => {
+        isDayShift = !isDayShift;
+        updateShiftBannerTime();
         showToast(isDayShift ? '已切换为夜班模式 (17:30 ~ 次日 08:00，共5次巡查)' : '已切换为白班模式 (08:00 ~ 17:30，共3次巡查)');
         return refreshAllData();
       }).catch(err => showToast(`⚠️ ${err.message}`));
@@ -3369,14 +3407,10 @@
     function legacyToggleShiftMode() {
       isDayShift = !isDayShift;
       const btn = document.getElementById('btnToggleShift');
-      const shiftTitle = document.getElementById('topShiftTitle');
-      const bannerShiftName = document.getElementById('bannerShiftName');
       const statPatrolLabel = document.getElementById('statPatrolLabel');
 
       if (isDayShift) {
         if (btn) btn.innerText = "切换夜班";
-        if (shiftTitle) shiftTitle.innerText = "2026年11月04日 白班 (08:00 ~ 17:30)";
-        if (bannerShiftName) bannerShiftName.innerText = "2026年11月04日 · 白班 (08:00 ~ 17:30)";
         if (statPatrolLabel) statPatrolLabel.innerText = "白班巡查 (共3次)";
 
         patrolSlots = [
@@ -3387,8 +3421,6 @@
         showToast('已切换为白班模式 (08:00 ~ 17:30，共3次巡查)');
       } else {
         if (btn) btn.innerText = "切换白班";
-        if (shiftTitle) shiftTitle.innerText = "2026年11月04日 夜班 (17:30 ~ 次日 08:00)";
-        if (bannerShiftName) bannerShiftName.innerText = "2026年11月04日 · 夜班 (17:30 ~ 次日 08:00)";
         if (statPatrolLabel) statPatrolLabel.innerText = "夜班巡查 (共5次)";
 
         patrolSlots = [
@@ -3400,6 +3432,7 @@
         ];
         showToast('已切换为夜班模式 (17:30 ~ 次日 08:00，共5次巡查)');
       }
+      updateShiftBannerTime();
       renderPatrolSlots();
     }
 
@@ -3759,7 +3792,7 @@
       if (!slot) return;
 
       const now = new Date();
-      const timeStr = now.toTimeString().split(' ')[0].substring(0, 5);
+      const timeStr = formatLogDateTime(now).slice(11, 16);
       
       const checkerSelect = document.getElementById('slotChecker_' + slotId);
       const chosenChecker = checkerSelect ? checkerSelect.value : (document.getElementById('operatorSelect')?.value || '王健威');
@@ -3771,7 +3804,7 @@
 
       shiftLogs.unshift({
         id: Date.now(),
-        time: now.toTimeString().split(' ')[0],
+        time: formatLogDateTime(now),
         category: "现场巡查",
         target: "靶站综合大厅",
         content: `${slot.time} 现场巡查完成：未见异常。各水冷机组与谱仪辅助设备运转平稳。`,
@@ -3815,7 +3848,7 @@
 
       const slot = patrolSlots.find(s => s.id === activeAnomalySlotId);
       const now = new Date();
-      const timeStr = now.toTimeString().split(' ')[0].substring(0, 5);
+      const timeStr = formatLogDateTime(now).slice(11, 16);
       const checker = activeAnomalyChecker || (document.getElementById('operatorSelect')?.value || '王健威');
 
       if (slot) {
@@ -3827,7 +3860,7 @@
 
       shiftLogs.unshift({
         id: Date.now(),
-        time: now.toTimeString().split(' ')[0],
+        time: formatLogDateTime(now),
         category: "运行报警",
         target: "靶站巡检发现",
         content: `【巡检异常】${slot ? slot.time : ''} ${content}`,
@@ -4125,7 +4158,7 @@
         if (log.status === '已闭环') statusClass = "text-emerald-400";
 
         tr.innerHTML = `
-          <td class="py-2.5 px-3 font-mono text-slate-400">${log.time}</td>
+          <td class="py-2.5 px-3 font-mono text-slate-400 whitespace-nowrap min-w-[125px]">${normalizeLogTime(log.time, log.occurred_at)}</td>
           <td class="py-2.5 px-3">
             <div class="font-medium text-slate-200">${log.target}</div>
             <div class="text-[10px] text-slate-400">${log.category}</div>
@@ -4176,7 +4209,7 @@
       const author = document.getElementById('logAuthorSelect').value;
 
       const now = new Date();
-      const timeStr = now.toTimeString().split(' ')[0];
+      const timeStr = formatLogDateTime(now);
 
       const newLog = {
         id: Date.now(),
@@ -4236,7 +4269,8 @@
       const student = (studentInp && studentInp.value.trim()) ? studentInp.value.trim() : currentStudent;
 
       document.getElementById('handoverTime').innerText = now.toLocaleString();
-      document.getElementById('modalShiftTypeDesc').innerText = isDayShift ? "2026年11月04日 白班 (08:00-17:30) → 今日夜班 (17:30-08:00)" : "2026年11月04日 夜班 (17:30-08:00) → 次日白班 (08:00-17:30)";
+      const handoverDate = `${now.getFullYear()}年${String(now.getMonth() + 1).padStart(2, '0')}月${String(now.getDate()).padStart(2, '0')}日`;
+      document.getElementById('modalShiftTypeDesc').innerText = isDayShift ? `${handoverDate} 白班 (08:00-17:30) → 今日夜班 (17:30-08:00)` : `${handoverDate} 夜班 (17:30-08:00) → 次日白班 (08:00-17:30)`;
       document.getElementById('handoverLeaderText').innerText = leader;
       document.getElementById('handoverOpText').innerText = `${op} (坐班: ${student})`;
 
@@ -4424,7 +4458,7 @@
       const stageNames = { pending: "1. 待处理", progress: "2. 排查排故中", escalated: "3. 专业组介入", closed: "4. 彻底闭环" };
       
       ev.col = flow[nextIdx];
-      const timeStr = new Date().toTimeString().split(' ')[0];
+      const timeStr = formatLogDateTime(new Date());
       const op = document.getElementById('operatorSelect').value;
 
       if (!ev.history) ev.history = [];
@@ -4796,7 +4830,7 @@
       const now = new Date();
       shiftLogs.unshift({
         id: Date.now(),
-        time: now.toTimeString().split(' ')[0],
+        time: formatLogDateTime(now),
         category: "谱仪协助",
         target: flow.title,
         content: `现场双人复核完成：${flow.code}。所有安全前置门槛全部自检合格，责任人：${leader} + ${op}。`,
@@ -5452,7 +5486,7 @@
       const dateText = formatShiftDate(shift.shift_date);
       const shiftText = isDayShift ? '白班 (08:00 ~ 17:30)' : '夜班 (17:30 ~ 次日 08:00)';
       setSafeText('topShiftTitle', `${dateText} ${shiftText}`);
-      setSafeText('bannerShiftName', `${dateText} · ${shiftText}`);
+      updateShiftBannerTime();
       setSafeText('statPatrolLabel', isDayShift ? '白班巡查 (共3次)' : '夜班巡查 (共5次)');
       const toggleButton = document.getElementById('btnToggleShift');
       if (toggleButton) toggleButton.innerText = isDayShift ? '切换夜班' : '切换白班';
@@ -5485,7 +5519,10 @@
     function hydrateFromBootstrap(data) {
       patrolSlots = data.patrol_slots || [];
       shiftTodos = data.todos || [];
-      shiftLogs = data.logs || [];
+      shiftLogs = (data.logs || []).map(log => ({
+        ...log,
+        time: normalizeLogTime(log.time, log.occurred_at)
+      }));
       eventsData = data.events || [];
       navList = data.nav_items || [];
       if (data.forecast) {
