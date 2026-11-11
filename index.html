@@ -68,6 +68,28 @@
     .glow-amber {
       box-shadow: 0 0 15px rgba(245, 158, 11, 0.25);
     }
+    .sop-list-card {
+      border: 1px solid #1e293b;
+      background: rgba(15, 23, 42, 0.62);
+      transition: border-color 0.18s ease, background-color 0.18s ease, box-shadow 0.18s ease;
+    }
+    .sop-list-card:hover {
+      border-color: #334155;
+    }
+    .sop-list-card.is-active {
+      border-color: rgba(34, 211, 238, 0.55);
+      background: rgba(8, 47, 73, 0.35);
+      box-shadow: 0 0 18px rgba(34, 211, 238, 0.10);
+    }
+    .sop-list-indicator {
+      opacity: 0;
+      transform: translateX(-3px);
+      transition: opacity 0.18s ease, transform 0.18s ease;
+    }
+    .sop-list-card.is-active .sop-list-indicator {
+      opacity: 1;
+      transform: translateX(0);
+    }
     #eventPdfPrintWrapper,
     #eventPdfPrintWrapper * {
       box-sizing: border-box;
@@ -957,107 +979,174 @@
       <!-- ======================================================== -->
       <!-- MODULE 5: 谱仪协助作业与 SOP 互动向导 (CHECKLIST & SOP) -->
       <!-- ======================================================== -->
-      <section id="view-sop" class="tab-view hidden space-y-6">
-        
-        <!-- Safety Alert / Stop-Work Guardrail Banner -->
-        <div class="bg-rose-950/40 border border-rose-600/40 rounded-xl p-4 flex items-start gap-3 shadow-lg glow-red">
-          <div class="w-8 h-8 rounded-lg bg-rose-600/20 border border-rose-500/50 flex items-center justify-center text-rose-400 shrink-0 mt-0.5">
-            <i class="ph ph-warning-octagon text-xl"></i>
+      <section id="view-sop" class="tab-view hidden space-y-4">
+
+        <!-- Safety Alert / Stop-Work Guardrail Banner (compact top ribbon) -->
+        <div class="bg-rose-950/40 border border-rose-600/40 rounded-xl px-4 py-3 flex items-start gap-3 shadow-lg glow-red">
+          <div class="w-7 h-7 rounded-lg bg-rose-600/20 border border-rose-500/50 flex items-center justify-center text-rose-400 shrink-0 mt-0.5">
+            <i class="ph ph-warning-octagon text-lg"></i>
           </div>
-          <div class="space-y-1">
-            <div class="flex items-center gap-2">
+          <div class="min-w-0 space-y-1">
+            <div class="flex flex-wrap items-center gap-2">
               <h3 class="font-bold text-sm text-rose-200">刚性安全止损（Stop-Work Guardrail）双人红线守则</h3>
               <span class="px-2 py-0.5 rounded text-[10px] font-bold bg-rose-500 text-white">遇阻即停</span>
             </div>
-            <p class="text-xs text-rose-200/80 leading-relaxed">
-              严格执行现场双人复核（Double-Check）！抽真空超 20 分钟未达 <strong class="text-white underline">50 Pa</strong> 严禁启动分子泵；机械插拔遇到反常阻力或刻线不合严禁蛮力硬压；触碰红线立即中止作业，15分钟内致电专业组专家。
+            <p class="text-[11px] text-rose-200/80 leading-relaxed">
+              严格执行现场双人复核（Double-Check）！抽真空超 20 分钟未达 <strong class="text-white underline">50 Pa</strong> 严禁启动分子泵；机械插拔遇到反常阻力或刻线不合严禁蛮力压入；触碰红线立即中止作业，15 分钟内致电专业组专家。
             </p>
           </div>
         </div>
 
-        <!-- Two Columns: SOP Tasks Selector & Active Checklist Workflow -->
-        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          
-          <!-- SOP Template Selection (1 Col) -->
-          <div class="space-y-3">
-            <div class="text-xs font-bold uppercase tracking-wider text-slate-400 px-1">标准化作业程序 (SOP) 清单</div>
+        <!-- Master-Detail: SOP Catalog & Dynamic Workspace -->
+        <div class="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
 
-            <!-- Card 1: 屏蔽门开关 -->
-            <div onclick="selectSopWorkflow('door')" id="sop-card-door" class="sop-select-card cursor-pointer p-4 rounded-xl bg-slate-900 border border-sky-500/40 bg-sky-950/20 transition-all">
-              <div class="flex items-center justify-between">
-                <span class="text-xs font-bold text-sky-400">SOP-01</span>
-                <span class="px-2 py-0.5 rounded text-[10px] bg-sky-500/10 text-sky-300 border border-sky-500/30">联锁强控制</span>
+          <!-- Left: 4-column catalog -->
+          <div id="sopListContainer" class="lg:col-span-4 space-y-3">
+            <div class="flex items-center justify-between px-1">
+              <div class="text-xs font-bold uppercase tracking-wider text-slate-400">标准化作业清单</div>
+              <span class="text-[10px] text-slate-500 font-mono">4 ITEMS</span>
+            </div>
+
+            <!-- Item 1: EPICS quick search -->
+            <div role="button" tabindex="0" onclick="switchSopSubView('epics')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();switchSopSubView('epics');}" data-sop-subview="epics" class="sop-list-card sop-select-card is-active w-full text-left cursor-pointer rounded-xl p-4">
+              <div class="flex items-center justify-between gap-2">
+                <span class="text-[10px] font-bold text-cyan-400 uppercase tracking-wider flex items-center gap-1">
+                  <i class="ph ph-magnifying-glass"></i> 置顶工具
+                </span>
+                <span id="sopListEpicsBadge" class="px-2 py-0.5 rounded text-[10px] font-mono bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 whitespace-nowrap">测点在库</span>
               </div>
-              <h4 class="font-bold text-sm text-white mt-1">谱仪屏蔽门开关操作与清场核验</h4>
+              <h4 class="font-bold text-sm text-white mt-2 flex items-center gap-1.5">
+                🔍 EPICS 报警与 On-Call 检索
+                <i class="ph ph-caret-right sop-list-indicator text-cyan-400 text-xs"></i>
+              </h4>
+              <p class="text-[10px] text-cyan-300/80 mt-1 font-mono">中控应急 / 测点直查</p>
+              <p class="text-xs text-slate-400 mt-1.5 leading-relaxed">输入 PV 变量名或中文描述，秒级调阅应急联系人与电话</p>
+            </div>
+
+            <!-- Item 2: SOP-01 door interlock -->
+            <div role="button" tabindex="0" onclick="selectSopWorkflow('door')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();selectSopWorkflow('door');}" id="sop-card-door" data-sop-subview="sop-01" class="sop-list-card sop-select-card w-full text-left cursor-pointer rounded-xl p-4">
+              <div class="flex items-center justify-between gap-2">
+                <span class="text-xs font-bold text-slate-400">SOP-01</span>
+                <span class="px-2 py-0.5 rounded text-[10px] bg-sky-500/10 text-sky-300 border border-sky-500/30">联锁控制</span>
+              </div>
+              <h4 class="font-bold text-sm text-white mt-1 flex items-center justify-between gap-2">
+                谱仪屏蔽门开关操作与清场核验
+                <i class="ph ph-caret-right sop-list-indicator text-cyan-400 text-xs"></i>
+              </h4>
               <p class="text-xs text-slate-400 mt-1">光电红外光幕复核、钥匙双人授权、人员清场信号</p>
             </div>
 
-            <!-- Card 2: 重启实验 Run -->
-            <div onclick="selectSopWorkflow('run')" id="sop-card-run" class="sop-select-card cursor-pointer p-4 rounded-xl bg-slate-900/60 border border-slate-800 hover:border-slate-700 transition-all">
-              <div class="flex items-center justify-between">
+            <!-- Item 3: SOP-02 run readiness -->
+            <div role="button" tabindex="0" onclick="selectSopWorkflow('run')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();selectSopWorkflow('run');}" id="sop-card-run" data-sop-subview="sop-02" class="sop-list-card sop-select-card w-full text-left cursor-pointer rounded-xl p-4">
+              <div class="flex items-center justify-between gap-2">
                 <span class="text-xs font-bold text-slate-400">SOP-02</span>
                 <span class="px-2 py-0.5 rounded text-[10px] bg-slate-800 text-slate-300">实验控制</span>
               </div>
-              <h4 class="font-bold text-sm text-white mt-1">谱仪实验重启 Run 前置门槛复核</h4>
+              <h4 class="font-bold text-sm text-white mt-1 flex items-center justify-between gap-2">
+                谱仪实验重启 Run 前置门槛复核
+                <i class="ph ph-caret-right sop-list-indicator text-cyan-400 text-xs"></i>
+              </h4>
               <p class="text-xs text-slate-400 mt-1">温控真空准入核验、探测器高压复位、快门状态核准</p>
             </div>
 
-            <!-- Card 3: 运行组例行设备巡查 -->
-            <div onclick="selectSopWorkflow('patrol')" id="sop-card-patrol" class="sop-select-card cursor-pointer p-4 rounded-xl bg-slate-900/60 border border-slate-800 hover:border-slate-700 transition-all">
-              <div class="flex items-center justify-between">
+            <!-- Item 4: SOP-03 routine patrol -->
+            <div role="button" tabindex="0" onclick="selectSopWorkflow('patrol')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();selectSopWorkflow('patrol');}" id="sop-card-patrol" data-sop-subview="sop-03" class="sop-list-card sop-select-card w-full text-left cursor-pointer rounded-xl p-4">
+              <div class="flex items-center justify-between gap-2">
                 <span class="text-xs font-bold text-slate-400">SOP-03</span>
                 <span class="px-2 py-0.5 rounded text-[10px] bg-emerald-500/10 text-emerald-300 border border-emerald-500/30">巡检打卡</span>
               </div>
-              <h4 class="font-bold text-sm text-white mt-1">靶站谱仪运行组例行巡查路线</h4>
+              <h4 class="font-bold text-sm text-white mt-1 flex items-center justify-between gap-2">
+                靶站谱仪运行组例行巡查路线
+                <i class="ph ph-caret-right sop-list-indicator text-cyan-400 text-xs"></i>
+              </h4>
               <p class="text-xs text-slate-400 mt-1">冷水机管路、氦气排管歧管、大厅机柜声光异常摸排</p>
             </div>
           </div>
 
-          <!-- Interactive Active Checklist (2 Cols) -->
-          <div class="lg:col-span-2 bg-[#0e1626] border border-slate-800 rounded-xl p-5 flex flex-col justify-between" id="activeSopContainer">
-            <div>
-              <!-- SOP Title and Progress -->
-              <div class="flex flex-col sm:flex-row sm:items-center justify-between pb-3 border-b border-slate-800 gap-2 mb-4">
-                <div>
-                  <div class="flex items-center gap-2">
-                    <span id="sopBadge" class="px-2 py-0.5 rounded text-[10px] font-bold bg-sky-500/20 text-sky-400 border border-sky-500/40">SOP-01</span>
-                    <h3 id="sopTitle" class="font-bold text-sm text-white">谱仪屏蔽门开关操作与清场核验</h3>
-                  </div>
-                  <p id="sopDesc" class="text-xs text-slate-400 mt-1">依照大科学装置辐射防护要求，开关屏蔽门必须执行现场人员双人复核并留痕。</p>
+          <!-- Right: 8-column dynamic workspace -->
+          <div id="sopRightContentPanel" class="lg:col-span-8 min-w-0">
+
+            <!-- Panel A: EPICS search -->
+            <div id="panel-epics-search" class="bg-[#0e1626] border border-slate-800 rounded-xl p-5 shadow-lg">
+              <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-3 border-b border-slate-800 mb-4">
+                <div class="flex items-center gap-2">
+                  <i class="ph ph-magnifying-glass text-cyan-400 text-lg"></i>
+                  <h3 class="font-bold text-sm text-white">EPICS 报警测点与应急 On-Call 快速检索</h3>
                 </div>
-                <div class="text-right">
-                  <span class="text-xs text-slate-400">当前核验进度</span>
-                  <div class="text-lg font-mono font-bold text-sky-400" id="sopProgressPercent">0%</div>
-                </div>
+                <span id="sopEpicsTotalBadge" class="self-start sm:self-auto px-2 py-0.5 rounded text-[10px] font-mono bg-cyan-500/10 text-cyan-300 border border-cyan-500/30 whitespace-nowrap">在库 -- 个测点</span>
               </div>
 
-              <!-- Progress Bar -->
-              <div class="w-full bg-slate-800 h-2 rounded-full overflow-hidden mb-5">
-                <div id="sopProgressBar" class="bg-gradient-to-r from-sky-500 to-cyan-400 h-full w-0 transition-all duration-300"></div>
+              <div class="relative">
+                <i class="ph ph-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-slate-500"></i>
+                <input id="sopEpicsSearchInput" type="text" placeholder="输入报警 PV 变量名（如 StaFault / EXP_IB1_VS）或中文描述（如 电机温度 / 水浸 / 真空）检索应急联系人..." class="w-full bg-slate-950 border border-slate-700 rounded-lg pl-9 pr-20 py-2.5 text-xs text-slate-100 focus:outline-none focus:border-cyan-500">
+                <button id="sopEpicsClearBtn" onclick="clearSopEpicsSearch()" class="absolute right-2 top-1/2 -translate-y-1/2 px-2 py-1 rounded text-[11px] text-slate-400 hover:text-white bg-slate-800 hover:bg-slate-700 transition-colors">清空</button>
               </div>
 
-              <!-- Checklist Step Items Container -->
-              <div class="space-y-3" id="sopChecklistItems">
-                <!-- Checklist injected via JS -->
+              <div class="flex flex-wrap items-center gap-1.5 mt-2.5">
+                <span class="text-[10px] text-slate-500 mr-1">快捷检索:</span>
+                <button onclick="setSopEpicsQuickTag('斩波器')" class="sop-epics-quick-tag px-2 py-0.5 rounded text-[10px] bg-slate-950 text-slate-300 border border-slate-700 hover:border-cyan-500/50 hover:text-cyan-300 transition-colors">斩波器</button>
+                <button onclick="setSopEpicsQuickTag('电机温度')" class="sop-epics-quick-tag px-2 py-0.5 rounded text-[10px] bg-slate-950 text-slate-300 border border-slate-700 hover:border-cyan-500/50 hover:text-cyan-300 transition-colors">电机温度</button>
+                <button onclick="setSopEpicsQuickTag('TPS联锁')" class="sop-epics-quick-tag px-2 py-0.5 rounded text-[10px] bg-slate-950 text-slate-300 border border-slate-700 hover:border-cyan-500/50 hover:text-cyan-300 transition-colors">TPS联锁</button>
+                <button onclick="setSopEpicsQuickTag('重水')" class="sop-epics-quick-tag px-2 py-0.5 rounded text-[10px] bg-slate-950 text-slate-300 border border-slate-700 hover:border-cyan-500/50 hover:text-cyan-300 transition-colors">重水</button>
+                <button onclick="setSopEpicsQuickTag('水浸')" class="sop-epics-quick-tag px-2 py-0.5 rounded text-[10px] bg-slate-950 text-slate-300 border border-slate-700 hover:border-cyan-500/50 hover:text-cyan-300 transition-colors">水浸</button>
+                <button onclick="setSopEpicsQuickTag('高压谱仪')" class="sop-epics-quick-tag px-2 py-0.5 rounded text-[10px] bg-slate-950 text-slate-300 border border-slate-700 hover:border-cyan-500/50 hover:text-cyan-300 transition-colors">高压谱仪</button>
+                <button onclick="setSopEpicsQuickTag('微小角')" class="sop-epics-quick-tag px-2 py-0.5 rounded text-[10px] bg-slate-950 text-slate-300 border border-slate-700 hover:border-cyan-500/50 hover:text-cyan-300 transition-colors">微小角</button>
+              </div>
+
+              <div id="sopEpicsSearchResults" class="mt-4 text-xs text-slate-500 min-h-[180px]">
+                <div class="h-[180px] flex flex-col items-center justify-center gap-2 text-center text-slate-500">
+                  <i class="ph ph-magnifying-glass text-2xl text-slate-600"></i>
+                  <span>💡 输入测点代码或中文关键词，秒级调阅对应谱仪/系统的应急联系人与电话。</span>
+                </div>
               </div>
             </div>
 
-            <!-- Action submission row -->
-            <div class="pt-5 mt-6 border-t border-slate-800 flex flex-col sm:flex-row items-center justify-between gap-3">
-              <div class="flex items-center gap-2 text-xs text-slate-400">
-                <i class="ph ph-shield-check text-sky-400 text-base"></i>
-                <span>双人复核执行人：<strong class="text-slate-200" id="sopExecutorsText">王征 (值班长) + 王健威 (值班员)</strong></span>
-              </div>
-              <div class="flex items-center gap-2 w-full sm:w-auto">
-                <button onclick="resetCurrentSop()" class="px-3 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs text-slate-300 font-medium">重置选项</button>
-                <button id="btnSubmitSop" onclick="submitSopExecution()" disabled class="flex-1 sm:flex-initial px-4 py-2 rounded-lg bg-slate-800 text-slate-500 text-xs font-semibold cursor-not-allowed transition-all">
-                  尚未完成全部复核
-                </button>
+            <!-- Panel B: SOP checklist -->
+            <div id="panel-sop-checklist" class="hidden">
+              <div class="bg-[#0e1626] border border-slate-800 rounded-xl p-5 flex flex-col justify-between" id="activeSopContainer">
+                <div>
+                  <div class="flex flex-col sm:flex-row sm:items-start justify-between pb-3 border-b border-slate-800 gap-3 mb-4">
+                    <div class="min-w-0">
+                      <div class="flex flex-wrap items-center gap-2">
+                        <span id="sopBadge" class="px-2 py-0.5 rounded text-[10px] font-bold bg-sky-500/20 text-sky-400 border border-sky-500/40">SOP-01</span>
+                        <h3 id="sopTitle" class="font-bold text-sm text-white">谱仪屏蔽门开关操作与清场核验</h3>
+                      </div>
+                      <p id="sopDesc" class="text-xs text-slate-400 mt-1.5 leading-relaxed">依照大科学装置辐射防护要求，开关屏蔽门必须执行现场人员双人复核并留痕。</p>
+                    </div>
+                    <div class="text-left sm:text-right shrink-0">
+                      <div class="flex items-center sm:justify-end gap-2">
+                        <span class="text-xs text-slate-400">当前核验进度</span>
+                        <span class="text-lg font-mono font-bold text-sky-400" id="sopProgressPercent">0%</span>
+                      </div>
+                      <div id="sopVersion" class="text-[10px] font-mono text-slate-500 mt-0.5">Rev. 2026.11</div>
+                    </div>
+                  </div>
+
+                  <div class="w-full bg-slate-800 h-2 rounded-full overflow-hidden mb-5">
+                    <div id="sopProgressBar" class="bg-gradient-to-r from-sky-500 to-cyan-400 h-full w-0 transition-all duration-300"></div>
+                  </div>
+
+                  <div class="space-y-3" id="sopChecklistItems">
+                    <!-- Checklist injected via JS -->
+                  </div>
+                </div>
+
+                <div class="pt-5 mt-6 border-t border-slate-800 flex flex-col sm:flex-row items-center justify-between gap-3">
+                  <div class="flex items-center gap-2 text-xs text-slate-400 min-w-0">
+                    <i class="ph ph-shield-check text-sky-400 text-base shrink-0"></i>
+                    <span class="truncate">双人复核执行人：<strong class="text-slate-200" id="sopExecutorsText">王征 (值班长) + 王健威 (值班员)</strong></span>
+                  </div>
+                  <div class="flex items-center gap-2 w-full sm:w-auto shrink-0">
+                    <button onclick="resetCurrentSop()" class="px-3 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs text-slate-300 font-medium">重置选项</button>
+                    <button id="btnSubmitSop" onclick="submitSopExecution()" disabled class="flex-1 sm:flex-initial px-4 py-2 rounded-lg bg-slate-800 text-slate-500 text-xs font-semibold cursor-not-allowed transition-all">
+                      尚未完成全部复核
+                    </button>
+                  </div>
+                </div>
               </div>
             </div>
 
           </div>
-
         </div>
 
       </section>
@@ -2830,6 +2919,7 @@
       door: {
         code: "SOP-01",
         title: "谱仪屏蔽门开关操作与清场核验",
+        version: "Rev. 2026.11",
         badge: "联锁强控制",
         desc: "依据大科学装置辐射联锁规程，开关屏蔽门必须现场双人复核并确认无滞留人员。",
         steps: [
@@ -2843,6 +2933,7 @@
       run: {
         code: "SOP-02",
         title: "谱仪实验重启 Run 前置门槛复核",
+        version: "Rev. 2026.11",
         badge: "实验控制",
         desc: "在重启中子束流采集 Run 前，强制核查真空、温区及探测器高压满足物理门槛。",
         steps: [
@@ -2856,6 +2947,7 @@
       patrol: {
         code: "SOP-03",
         title: "靶站谱仪运行组例行巡查路线",
+        version: "Rev. 2026.11",
         badge: "巡检打卡",
         desc: "白班/夜班每班次固定巡检大厅关键动力辅助设施与管线密封。",
         steps: [
@@ -2868,6 +2960,7 @@
       }
     };
     let activeSopKey = "door";
+    let activeSopTab = "epics";
     let activeAgentId = "d2o_h2";
     let agentTypingTimer = null;
 
@@ -3042,6 +3135,9 @@
         renderAssistCategoryTabs();
         renderAssistTable();
         updateAssistDateSortUI();
+      }
+      if (tabKey === 'sop') {
+        switchSopSubView(activeSopTab || 'epics');
       }
     }
 
@@ -3277,7 +3373,7 @@
     function agentOpenSop() {
       switchTab('sop');
       selectSopWorkflow(activeAgentId === 'cryo_ccr' ? 'run' : 'patrol');
-      showToast('✅ 已切换至模块 4：请按规程核对排气与巡检前置条件');
+      showToast('✅ 已切换至模块 5：请按规程核对排气与巡检前置条件');
     }
 
     async function agentWriteShiftLog() {
@@ -4721,17 +4817,34 @@
     // ==========================================
     // MODULE 4: SOP CHECKLIST WORKFLOW (权限感知)
     // ==========================================
-    function selectSopWorkflow(sopKey) {
-      activeSopKey = sopKey;
-      document.querySelectorAll('.sop-select-card').forEach(c => {
-        c.className = "sop-select-card cursor-pointer p-4 rounded-xl bg-slate-900/60 border border-slate-800 hover:border-slate-700 transition-all";
+    const SOP_KEY_TO_SUBVIEW = { door: 'sop-01', run: 'sop-02', patrol: 'sop-03' };
+    const SOP_SUBVIEW_TO_KEY = { 'sop-01': 'door', 'sop-02': 'run', 'sop-03': 'patrol' };
+
+    function switchSopSubView(subViewKey) {
+      const key = SOP_SUBVIEW_TO_KEY[subViewKey] ? subViewKey : 'epics';
+      activeSopTab = key;
+
+      document.querySelectorAll('#sopListContainer .sop-select-card').forEach(card => {
+        card.classList.toggle('is-active', card.dataset.sopSubview === key);
       });
 
-      const activeCard = document.getElementById('sop-card-' + sopKey);
-      if (activeCard) {
-        activeCard.className = "sop-select-card cursor-pointer p-4 rounded-xl bg-slate-900 border border-sky-500/40 bg-sky-950/20 transition-all";
+      const epicsPanel = document.getElementById('panel-epics-search');
+      const sopPanel = document.getElementById('panel-sop-checklist');
+      const isEpics = key === 'epics';
+      if (epicsPanel) epicsPanel.classList.toggle('hidden', !isEpics);
+      if (sopPanel) sopPanel.classList.toggle('hidden', isEpics);
+
+      if (isEpics) {
+        initSopEpicsSearch();
+        return;
       }
+
+      activeSopKey = SOP_SUBVIEW_TO_KEY[key];
       renderSop();
+    }
+
+    function selectSopWorkflow(sopKey) {
+      switchSopSubView(SOP_KEY_TO_SUBVIEW[sopKey] || 'epics');
     }
 
     function renderSop() {
@@ -4741,6 +4854,8 @@
       document.getElementById('sopBadge').innerText = flow.code;
       document.getElementById('sopTitle').innerText = flow.title;
       document.getElementById('sopDesc').innerText = flow.desc;
+      const versionEl = document.getElementById('sopVersion');
+      if (versionEl) versionEl.innerText = flow.version || 'Rev. 2026.11';
 
       const container = document.getElementById('sopChecklistItems');
       container.innerHTML = '';
@@ -4797,7 +4912,7 @@
       } else if (percent === 100) {
         btn.disabled = false;
         btn.className = "flex-1 sm:flex-initial px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold cursor-pointer shadow-lg shadow-emerald-600/30 transition-all flex items-center gap-1.5 justify-center";
-        btn.innerHTML = `<i class="ph ph-check-circle-bold text-sm"></i> 确认全部步骤复核无误 · 签署打卡`;
+        btn.innerHTML = `<i class="ph ph-check-circle-bold text-sm"></i> 签署并完成留痕`;
       } else {
         btn.disabled = true;
         btn.className = "flex-1 sm:flex-initial px-4 py-2 rounded-lg bg-slate-800 text-slate-500 text-xs font-semibold cursor-not-allowed transition-all";
@@ -5299,6 +5414,196 @@
           button.classList.add('hidden');
         });
       }
+    }
+
+    // ==========================================
+    // MODULE 5: EPICS ALARM PV & ON-CALL SEARCH
+    // ==========================================
+    let sopEpicsSearchTimer = null;
+    let sopEpicsSearchSeq = 0;
+    let sopEpicsInitialized = false;
+
+    function escapeEpicsHtml(value) {
+      return String(value == null ? '' : value)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+    }
+
+    function formatEpicsOnCall(value) {
+      const escaped = escapeEpicsHtml(value || '未登记 On-Call 联系人');
+      return escaped.replace(/(?<!\d)(\+?\d[\d-]{6,}\d)(?!\d)/g, '<a href="tel:$1" class="text-cyan-300 hover:text-cyan-200 underline decoration-cyan-500/40">$1</a>');
+    }
+
+    function initSopEpicsSearch() {
+      if (sopEpicsInitialized) return;
+      const input = document.getElementById('sopEpicsSearchInput');
+      if (!input) return;
+      sopEpicsInitialized = true;
+      input.addEventListener('input', () => {
+        clearTimeout(sopEpicsSearchTimer);
+        sopEpicsSearchTimer = setTimeout(runSopEpicsSearch, 250);
+      });
+      input.addEventListener('keydown', event => {
+        if (event.key === 'Enter') {
+          event.preventDefault();
+          clearTimeout(sopEpicsSearchTimer);
+          runSopEpicsSearch();
+        }
+      });
+      loadSopEpicsTotal();
+    }
+
+    async function loadSopEpicsTotal() {
+      try {
+        const result = await apiRequest('/epics-alarms/count');
+        const badge = document.getElementById('sopEpicsTotalBadge');
+        if (badge) badge.innerText = `在库 ${result.count} 个测点`;
+        const listBadge = document.getElementById('sopListEpicsBadge');
+        if (listBadge) listBadge.innerText = `在库 ${result.count}`;
+      } catch (error) {
+        const badge = document.getElementById('sopEpicsTotalBadge');
+        if (badge) badge.innerText = '在库数量暂不可用';
+        const listBadge = document.getElementById('sopListEpicsBadge');
+        if (listBadge) listBadge.innerText = '数量不可用';
+      }
+    }
+
+    async function runSopEpicsSearch() {
+      const input = document.getElementById('sopEpicsSearchInput');
+      const results = document.getElementById('sopEpicsSearchResults');
+      const badge = document.getElementById('sopEpicsTotalBadge');
+      if (!input || !results) return;
+      const query = input.value.trim();
+      if (!query) {
+        sopEpicsSearchSeq += 1;
+        if (badge) badge.innerText = '在库 -- 个测点';
+        const listBadge = document.getElementById('sopListEpicsBadge');
+        if (listBadge) listBadge.innerText = '测点在库';
+        results.innerHTML = `<div class="h-[180px] flex flex-col items-center justify-center gap-2 text-center text-slate-500">
+          <i class="ph ph-magnifying-glass text-2xl text-slate-600"></i>
+          <span>💡 输入测点代码或中文关键词，秒级调阅对应谱仪/系统的应急联系人与电话。</span>
+        </div>`;
+        return;
+      }
+      const seq = ++sopEpicsSearchSeq;
+      results.innerHTML = '<span class="text-slate-500">正在检索 EPICS 报警测点...</span>';
+      try {
+        const rows = await apiRequest(`/epics-alarms?q=${encodeURIComponent(query)}`);
+        if (seq !== sopEpicsSearchSeq) return;
+        if (badge) badge.innerText = `匹配 ${rows.length} 条测点`;
+        const listBadge = document.getElementById('sopListEpicsBadge');
+        if (listBadge) listBadge.innerText = `匹配 ${rows.length}`;
+        if (!rows.length) {
+          results.innerHTML = '<div class="h-[180px] flex items-center justify-center text-center text-slate-400">未检索到匹配的 EPICS 报警测点</div>';
+          return;
+        }
+        const body = rows.map(row => `
+          <tr class="border-b border-slate-800/70 hover:bg-slate-800/30 transition-colors align-top">
+            <td class="py-2.5 px-3 min-w-[150px]">
+              <div class="font-semibold text-slate-200">${escapeEpicsHtml(row.system_name)}</div>
+              <div class="text-[10px] text-slate-400 mt-0.5">${escapeEpicsHtml(row.subsystem)}</div>
+            </td>
+            <td class="py-2.5 px-3 min-w-[260px]">
+              <div class="flex items-start gap-1.5">
+                <code class="font-mono font-bold text-cyan-300 break-all">${escapeEpicsHtml(row.pv_name)}</code>
+                <button type="button" onclick="copyEpicsPv('${escapeEpicsHtml(row.pv_name).replace(/'/g, "\\'")}')" class="shrink-0 px-1.5 py-0.5 rounded text-[10px] text-slate-400 hover:text-cyan-300 bg-slate-900 border border-slate-700" title="复制 PV 变量名">📋 复制</button>
+              </div>
+            </td>
+            <td class="py-2.5 px-3 text-slate-300 min-w-[170px]">${escapeEpicsHtml(row.description)}</td>
+            <td class="py-2.5 px-3 whitespace-pre-line font-mono text-xs text-amber-300 leading-relaxed min-w-[190px]">${formatEpicsOnCall(row.oncall_raw)}</td>
+          </tr>`).join('');
+        results.innerHTML = `
+          <div class="overflow-x-auto rounded-lg border border-slate-800">
+            <table class="w-full text-left text-xs">
+              <thead class="bg-slate-950/90 text-slate-400 font-mono uppercase text-[10px]">
+                <tr>
+                  <th class="py-2 px-3">所属谱仪 / 子系统</th>
+                  <th class="py-2 px-3">报警 PV 变量名</th>
+                  <th class="py-2 px-3">中文描述</th>
+                  <th class="py-2 px-3">应急 On-Call 联系人</th>
+                </tr>
+              </thead>
+              <tbody>${body}</tbody>
+            </table>
+          </div>`;
+      } catch (error) {
+        if (seq !== sopEpicsSearchSeq) return;
+        results.innerHTML = `<div class="py-3 text-center text-rose-300">检索失败：${escapeEpicsHtml(error.message)}</div>`;
+      }
+    }
+
+    function setSopEpicsQuickTag(tag) {
+      const input = document.getElementById('sopEpicsSearchInput');
+      if (!input) return;
+      input.value = tag;
+      clearTimeout(sopEpicsSearchTimer);
+      runSopEpicsSearch();
+    }
+
+    function clearSopEpicsSearch() {
+      const input = document.getElementById('sopEpicsSearchInput');
+      if (input) input.value = '';
+      const results = document.getElementById('sopEpicsSearchResults');
+      clearTimeout(sopEpicsSearchTimer);
+      runSopEpicsSearch();
+      loadSopEpicsTotal();
+    }
+
+    // 全局通用的免授权剪贴板复制函数（兼容内网 HTTP IP 环境）
+    function copyPvToClipboard(text) {
+      if (!text) return;
+
+      if (navigator.clipboard && window.isSecureContext) {
+        navigator.clipboard.writeText(text)
+          .then(() => {
+            showToast(`✅ 已复制测点: ${text}`);
+          })
+          .catch(() => {
+            fallbackCopyText(text);
+          });
+      } else {
+        fallbackCopyText(text);
+      }
+    }
+
+    // 降级兼容函数：创建隐藏文本域执行 execCommand('copy')
+    function fallbackCopyText(text) {
+      let textArea = null;
+      let successful = false;
+      try {
+        textArea = document.createElement('textarea');
+        textArea.value = text;
+        textArea.style.position = 'fixed';
+        textArea.style.top = '-9999px';
+        textArea.style.left = '-9999px';
+        textArea.style.opacity = '0';
+        textArea.setAttribute('readonly', '');
+        document.body.appendChild(textArea);
+
+        textArea.focus();
+        textArea.select();
+        textArea.setSelectionRange(0, 99999);
+
+        successful = document.execCommand('copy');
+      } catch (error) {
+        console.error('Fallback copy failed:', error);
+      } finally {
+        if (textArea && textArea.parentNode) textArea.parentNode.removeChild(textArea);
+      }
+
+      if (successful) {
+        showToast(`✅ 已复制测点: ${text}`);
+      } else {
+        showToast('⚠️ 复制未成功，请手动选中复制');
+      }
+    }
+
+    // 兼容既有按钮 onclick="copyEpicsPv(...)" 调用
+    function copyEpicsPv(pvName) {
+      copyPvToClipboard(pvName);
     }
 
     // ==========================================

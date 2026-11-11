@@ -238,3 +238,15 @@ class SpectrometerAssist(Base):
     operators: Mapped[str] = mapped_column(String(300), nullable=False)
     notes: Mapped[str] = mapped_column(Text, default="", nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, index=True, nullable=False)
+
+
+class EpicsAlarmPV(Base):
+    __tablename__ = "epics_alarm_pvs"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    system_name: Mapped[str] = mapped_column(String(100), index=True, nullable=False)
+    subsystem: Mapped[str] = mapped_column(String(100), index=True, nullable=False)
+    pv_name: Mapped[str] = mapped_column(String(150), unique=True, index=True, nullable=False)
+    description: Mapped[str] = mapped_column(String(255), index=True, nullable=False)
+    oncall_raw: Mapped[str] = mapped_column(Text, default="", nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, nullable=False)

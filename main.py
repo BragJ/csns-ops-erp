@@ -31,6 +31,7 @@ from models import (
     PatrolSlot,
     SpectrometerAssist,
     SpectrometerAssistCategory,
+    EpicsAlarmPV,
     ShiftHandover,
     ShiftLog,
     ShiftTodo,
@@ -340,6 +341,13 @@ async def lifespan(_app: FastAPI):
     Base.metadata.create_all(bind=engine)
     with SessionLocal() as db:
         seed_database(db)
+        if db.scalar(select(EpicsAlarmPV).limit(1)) is None:
+            try:
+                from scripts.import_pv_alarms import import_pv_alarms
+
+                import_pv_alarms(db=db, verbose=False)
+            except (FileNotFoundError, ValueError) as exc:
+                print(f"[pv-alarm] 启动自动导入跳过: {exc}")
     yield
 
 
@@ -1119,6 +1127,40 @@ def list_nav_items(_user: User = Depends(get_current_user), db: Session = Depend
 def list_log_targets(_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     items = db.scalars(select(LogTarget).order_by(LogTarget.sort_order, LogTarget.id)).all()
     return [log_target_dict(item) for item in items]
+
+
+@app.get("/api/v1/epics-alarms")
+def search_epics_alarms(q: Optional[str] = Query(default=None, max_length=150), db: Session = Depends(get_db)):
+    statement = select(EpicsAlarmPV).order_by(EpicsAlarmPV.id)
+    keyword = (q or '').strip()
+    if keyword:
+        pattern = f"%{keyword}%"
+        statement = statement.where(
+            or_(
+                EpicsAlarmPV.pv_name.ilike(pattern),
+                EpicsAlarmPV.description.ilike(pattern),
+                EpicsAlarmPV.system_name.ilike(pattern),
+                EpicsAlarmPV.subsystem.ilike(pattern),
+            )
+        ).limit(200)
+    else:
+        statement = statement.limit(15)
+    return [
+        {
+            "id": item.id,
+            "system_name": item.system_name,
+            "subsystem": item.subsystem,
+            "pv_name": item.pv_name,
+            "description": item.description,
+            "oncall_raw": item.oncall_raw,
+        }
+        for item in db.scalars(statement).all()
+    ]
+
+
+@app.get("/api/v1/epics-alarms/count")
+def count_epics_alarms(db: Session = Depends(get_db)):
+    return {"count": db.scalar(select(func.count()).select_from(EpicsAlarmPV)) or 0}
 
 
 @app.get("/api/v1/spectrometer-assists/categories")
