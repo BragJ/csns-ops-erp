@@ -58,10 +58,11 @@ init_database() {
   "$PYTHON_BIN" - <<'PY'
 from database import Base, DB_PATH, SessionLocal, engine
 import models  # noqa: F401
-from main import seed_database
+from main import ensure_assist_param_column, seed_database
 
 Base.metadata.create_all(bind=engine)
 with SessionLocal() as db:
+    ensure_assist_param_column(db)
     shift = seed_database(db)
 print(f"database: {DB_PATH}")
 print(f"active shift: {shift.id} ({shift.shift_type})")

@@ -8,7 +8,7 @@ from fastapi import Depends, FastAPI, HTTPException, Query, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, ConfigDict, Field
-from sqlalchemy import func, or_, select
+from sqlalchemy import func, inspect, or_, select, text
 from sqlalchemy.orm import Session, selectinload
 
 from auth import (
@@ -60,31 +60,31 @@ ASSIST_CATEGORY_SEEDS = [
     ("other", "其它协助", "🛠️", "其它协作板块：谱仪 Run 异常重新起动、真空泵组保障、水系统辐射剂量核验等。"),
 ]
 ASSIST_SEEDS = [
-    ("anis", "协助开关散射室屏蔽门", "大气谱仪", "夜班", "2", "2026/10/22", "王健威、王征", ""),
-    ("anis", "协助开关散射室屏蔽门", "大气谱仪", "白班", "1", "2026/10/23", "汪静", ""),
-    ("sample", "协助CCR06换样", "GPPD谱仪", "白班", "1", "2026/10/24", "钟嘉充", ""),
-    ("sample", "协助CCR06换样", "GPPD谱仪", "白班", "2", "2026/10/25", "王健威", ""),
-    ("other", "协助谱仪重新起run", "成像谱仪", "夜班", "1", "2026/10/26", "叶培钊", ""),
-    ("sample", "协助CCR06换样", "GPPD谱仪", "白班", "1", "2026/10/29", "周科", ""),
-    ("other", "协助真空泵组运行", "高能非弹谱仪", "夜班", "3", "2026/10/29", "徐锦鸿", ""),
-    ("sample", "协助CCR06换样", "GPPD谱仪", "白班", "2", "2026/10/30", "王征、王健威", ""),
-    ("other", "协助检查水系统辐射剂量监测曲线", "实验公用系统", "白班", "1", "2026/10/30", "王健威", ""),
-    ("anis", "协助谱仪工作", "大气谱仪", "白班", "", "2026/10/31", "张文翔、曾智蓉", ""),
-    ("sample", "协助CCR09换样", "高压谱仪", "夜班", "1", "2026/10/31", "叶培钊、钟嘉充", ""),
-    ("sample", "协助CCR06换样", "GPPD谱仪", "白班", "3", "2026/11/1", "徐锦鸿、汪静", ""),
-    ("sample", "协助CCR09换样", "高压谱仪", "白班", "1", "2026/11/1", "徐锦鸿、汪静", ""),
-    ("anis", "协助开关散射室屏蔽门", "大气谱仪", "夜班", "N", "2026/11/1", "王健威", ""),
-    ("other", "现场查看样品环境温度", "高压谱仪", "夜班", "1", "2026/11/1", "王征", ""),
-    ("anis", "协助开关散射室屏蔽门", "大气谱仪", "白班", "2", "2026/11/2", "周科", ""),
-    ("sample", "协助CCR09换样", "高压谱仪", "白班", "1", "2026/11/2", "黄清辉", ""),
-    ("sample", "协助CCR06换样", "GPPD谱仪", "白班", "1", "2026/11/2", "黄清辉", ""),
-    ("sample", "协助CCR09换样", "高压谱仪", "白班", "1", "2026/11/3", "叶培钊", ""),
-    ("anis", "协助开关散射室屏蔽门", "大气谱仪", "白班", "2", "2026/11/3", "钟嘉充", ""),
-    ("anis", "协助开关散射室屏蔽门", "大气谱仪", "夜班", "5", "2026/11/3", "徐锦鸿、汪静", ""),
-    ("anis", "独立更换样品、调整样品台、准直器工况", "大气谱仪", "夜班", "1", "2026/11/3", "徐锦鸿、汪静", ""),
-    ("sample", "协助CCR06换样", "GPPD谱仪", "夜班", "1", "2026/11/5", "叶培钊、钟嘉充", ""),
-    ("anis", "协助开关散射室屏蔽门", "大气谱仪", "夜班", "N", "2026/11/6", "王健威、王征", ""),
-    ("sample", "协助CCR09换样", "高压谱仪", "夜班", "1", "2026/11/6", "王征", ""),
+    ("anis", "协助开关散射室屏蔽门", "大气谱仪", "屏蔽门全开到位", "夜班", "2", "2026/10/22", "王健威、王征", ""),
+    ("anis", "协助开关散射室屏蔽门", "大气谱仪", "屏蔽门闭合复核", "白班", "1", "2026/10/23", "汪静", ""),
+    ("sample", "协助CCR06换样", "GPPD谱仪", "", "白班", "1", "2026/10/24", "钟嘉充", ""),
+    ("sample", "协助CCR06换样", "GPPD谱仪", "", "白班", "2", "2026/10/25", "王健威", ""),
+    ("other", "协助谱仪重新起run", "成像谱仪", "", "夜班", "1", "2026/10/26", "叶培钊", ""),
+    ("sample", "协助CCR06换样", "GPPD谱仪", "", "白班", "1", "2026/10/29", "周科", ""),
+    ("other", "协助真空泵组运行", "高能非弹谱仪", "", "夜班", "3", "2026/10/29", "徐锦鸿", ""),
+    ("sample", "协助CCR06换样", "GPPD谱仪", "", "白班", "2", "2026/10/30", "王征、王健威", ""),
+    ("other", "协助检查水系统辐射剂量监测曲线", "实验公用系统", "", "白班", "1", "2026/10/30", "王健威", ""),
+    ("anis", "协助谱仪工作", "大气谱仪", "", "白班", "", "2026/10/31", "张文翔、曾智蓉", ""),
+    ("sample", "协助CCR09换样", "高压谱仪", "", "夜班", "1", "2026/10/31", "叶培钊、钟嘉充", ""),
+    ("sample", "协助CCR06换样", "GPPD谱仪", "", "白班", "3", "2026/11/1", "徐锦鸿、汪静", ""),
+    ("sample", "协助CCR09换样", "高压谱仪", "", "白班", "1", "2026/11/1", "徐锦鸿、汪静", ""),
+    ("anis", "协助开关散射室屏蔽门", "大气谱仪", "屏蔽门全开到位", "夜班", "N", "2026/11/1", "王健威", ""),
+    ("other", "现场查看样品环境温度", "高压谱仪", "", "夜班", "1", "2026/11/1", "王征", ""),
+    ("anis", "协助开关散射室屏蔽门", "大气谱仪", "屏蔽门闭合复核", "白班", "2", "2026/11/2", "周科", ""),
+    ("sample", "协助CCR09换样", "高压谱仪", "", "白班", "1", "2026/11/2", "黄清辉", ""),
+    ("sample", "协助CCR06换样", "GPPD谱仪", "", "白班", "1", "2026/11/2", "黄清辉", ""),
+    ("sample", "协助CCR09换样", "高压谱仪", "", "白班", "1", "2026/11/3", "叶培钊", ""),
+    ("anis", "协助开关散射室屏蔽门", "大气谱仪", "屏蔽门全开到位", "白班", "2", "2026/11/3", "钟嘉充", ""),
+    ("anis", "协助开关散射室屏蔽门", "大气谱仪", "屏蔽门闭合复核", "夜班", "5", "2026/11/3", "徐锦鸿、汪静", ""),
+    ("anis", "独立更换样品、调整样品台、准直器工况", "大气谱仪", "准直器 2# 对应工况", "夜班", "1", "2026/11/3", "徐锦鸿、汪静", ""),
+    ("sample", "协助CCR06换样", "GPPD谱仪", "", "夜班", "1", "2026/11/5", "叶培钊、钟嘉充", ""),
+    ("anis", "协助开关散射室屏蔽门", "大气谱仪", "屏蔽门全开到位", "夜班", "N", "2026/11/6", "王健威、王征", ""),
+    ("sample", "协助CCR09换样", "高压谱仪", "", "夜班", "1", "2026/11/6", "王征", ""),
 ]
 
 
@@ -92,6 +92,49 @@ def as_naive_utc(value: datetime) -> datetime:
     if value.tzinfo is not None:
         return value.astimezone(timezone.utc).replace(tzinfo=None)
     return value
+
+
+ASSIST_PARAM_BACKFILL = (
+    ("协助开关散射室屏蔽门", "屏蔽门全开到位"),
+    ("独立更换样品、调整样品台、准直器工况", "准直器 2# 对应工况"),
+)
+
+
+def ensure_assist_param_column(db: Session) -> None:
+    """为既有 SQLite 库平滑补列，并一次性回填历史工况参数与班次归属。"""
+    columns = {column["name"] for column in inspect(engine).get_columns("spectrometer_assists")}
+    if "param_condition" not in columns:
+        db.execute(text("ALTER TABLE spectrometer_assists ADD COLUMN param_condition VARCHAR(255) NOT NULL DEFAULT ''"))
+        db.commit()
+    if "created_shift_id" not in columns:
+        db.execute(
+            text("ALTER TABLE spectrometer_assists ADD COLUMN created_shift_id INTEGER REFERENCES duty_shifts(id) ON DELETE SET NULL")
+        )
+        db.commit()
+
+    for action, param in ASSIST_PARAM_BACKFILL:
+        db.execute(
+            text(
+                "UPDATE spectrometer_assists SET param_condition = :param "
+                "WHERE spectrometer = :spec AND action_content = :action "
+                "AND (param_condition IS NULL OR param_condition = '')"
+            ),
+            {"param": param, "spec": "大气谱仪", "action": action},
+        )
+
+    # 历史记录统一归属到最近已封班的班次，确保普通值班员无法追溯篡改。
+    closed_shift_id = db.scalar(
+        select(DutyShift.id).where(DutyShift.status == "closed").order_by(DutyShift.id.desc())
+    )
+    if closed_shift_id is not None:
+        db.execute(
+            text(
+                "UPDATE spectrometer_assists SET created_shift_id = :shift_id "
+                "WHERE created_shift_id IS NULL"
+            ),
+            {"shift_id": closed_shift_id},
+        )
+    db.commit()
 
 
 def iso(value: Optional[datetime]) -> Optional[str]:
@@ -312,6 +355,7 @@ def seed_database(db: Session) -> DutyShift:
                     category_id=category_id,
                     action_content=action,
                     spectrometer=spectrometer,
+                    param_condition=param_condition,
                     shift_type=shift_type,
                     count_val=count_val,
                     op_date=op_date,
@@ -323,6 +367,7 @@ def seed_database(db: Session) -> DutyShift:
                     category_id,
                     action,
                     spectrometer,
+                    param_condition,
                     shift_type,
                     count_val,
                     op_date,
@@ -340,6 +385,7 @@ def seed_database(db: Session) -> DutyShift:
 async def lifespan(_app: FastAPI):
     Base.metadata.create_all(bind=engine)
     with SessionLocal() as db:
+        ensure_assist_param_column(db)
         seed_database(db)
         if db.scalar(select(EpicsAlarmPV).limit(1)) is None:
             try:
@@ -477,6 +523,19 @@ class AssistCreatePayload(BaseModel):
     category_id: str = Field(min_length=1, max_length=60)
     action_content: str = Field(min_length=1, max_length=500)
     spectrometer: str = Field(min_length=1, max_length=160)
+    param_condition: str = Field(default="", max_length=255)
+    shift_type: Literal["白班", "夜班"]
+    count_val: str = Field(default="1", max_length=20)
+    op_date: str = Field(min_length=8, max_length=10)
+    operators: str = Field(min_length=1, max_length=300)
+    notes: str = Field(default="", max_length=1000)
+
+
+class AssistUpdatePayload(BaseModel):
+    category_id: str = Field(min_length=1, max_length=60)
+    action_content: str = Field(min_length=1, max_length=500)
+    spectrometer: str = Field(min_length=1, max_length=160)
+    param_condition: str = Field(default="", max_length=255)
     shift_type: Literal["白班", "夜班"]
     count_val: str = Field(default="1", max_length=20)
     op_date: str = Field(min_length=8, max_length=10)
@@ -628,11 +687,13 @@ def assist_dict(item: SpectrometerAssist) -> dict:
         "category": item.category_id,
         "action": item.action_content,
         "spec": item.spectrometer,
+        "param_condition": item.param_condition or "",
         "shift": item.shift_type,
         "count": item.count_val,
         "date": item.op_date,
         "operators": item.operators,
         "notes": item.notes,
+        "created_shift_id": item.created_shift_id,
         "created_at": iso(item.created_at),
     }
 
@@ -1219,6 +1280,7 @@ def list_spectrometer_assists(
             or_(
                 func.lower(SpectrometerAssist.action_content).like(pattern),
                 func.lower(SpectrometerAssist.spectrometer).like(pattern),
+                func.lower(SpectrometerAssist.param_condition).like(pattern),
                 func.lower(SpectrometerAssist.operators).like(pattern),
                 func.lower(SpectrometerAssist.notes).like(pattern),
                 func.lower(SpectrometerAssist.op_date).like(pattern),
@@ -1245,10 +1307,13 @@ def create_spectrometer_assist(
     operators = payload.operators.strip()
     if not operators:
         raise HTTPException(status_code=422, detail="请至少选择一位操作人")
+    active_shift = db.scalar(select(DutyShift).where(DutyShift.status == "active").order_by(DutyShift.id.desc()))
     item = SpectrometerAssist(
+        created_shift_id=active_shift.id if active_shift else None,
         category_id=category.category_id,
         action_content=payload.action_content.strip(),
         spectrometer=payload.spectrometer.strip(),
+        param_condition=payload.param_condition.strip(),
         shift_type=payload.shift_type,
         count_val=payload.count_val.strip() or "1",
         op_date=parsed_date.strftime("%Y/%m/%d"),
@@ -1256,6 +1321,51 @@ def create_spectrometer_assist(
         notes=payload.notes.strip(),
     )
     db.add(item)
+    db.commit()
+    return assist_dict(item)
+
+
+@app.patch("/api/v1/spectrometer-assists/{assist_id}")
+def update_spectrometer_assist(
+    assist_id: int,
+    payload: AssistUpdatePayload,
+    user: User = Depends(require_operator_or_admin),
+    db: Session = Depends(get_db),
+):
+    item = db.get(SpectrometerAssist, assist_id)
+    if item is None:
+        raise HTTPException(status_code=404, detail="协助记录不存在")
+
+    if user.role != "admin":
+        active_shift = db.scalar(select(DutyShift).where(DutyShift.status == "active").order_by(DutyShift.id.desc()))
+        if active_shift is None or item.created_shift_id != active_shift.id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="该协助记录所属班次已封班归档，普通值班员无权修改，请联系管理员周科处理。",
+            )
+
+    category = db.scalar(
+        select(SpectrometerAssistCategory).where(SpectrometerAssistCategory.category_id == payload.category_id)
+    )
+    if category is None:
+        raise HTTPException(status_code=422, detail="协助业务分类不存在")
+    try:
+        parsed_date = datetime.strptime(payload.op_date.strip(), "%Y/%m/%d")
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail="操作时间格式必须为 YYYY/MM/DD") from exc
+    operators = payload.operators.strip()
+    if not operators:
+        raise HTTPException(status_code=422, detail="请至少选择一位操作人")
+
+    item.category_id = category.category_id
+    item.action_content = payload.action_content.strip()
+    item.spectrometer = payload.spectrometer.strip()
+    item.param_condition = payload.param_condition.strip()
+    item.shift_type = payload.shift_type
+    item.count_val = payload.count_val.strip() or "1"
+    item.op_date = parsed_date.strftime("%Y/%m/%d")
+    item.operators = operators
+    item.notes = payload.notes.strip()
     db.commit()
     return assist_dict(item)
 

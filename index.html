@@ -894,12 +894,13 @@
             <table class="excel-table w-full text-left border-collapse text-xs">
               <thead class="sticky top-0 z-20 shadow-sm">
                 <tr>
-                  <th class="py-2.5 px-3 text-center w-14">序号</th>
-                  <th class="py-2.5 px-4 min-w-[220px]">操作内容</th>
-                  <th class="py-2.5 px-3 w-32 min-w-[120px]">所属谱仪/系统</th>
-                  <th class="py-2.5 px-3 text-center w-20">白/夜班</th>
-                  <th class="py-2.5 px-3 text-center w-16">次数</th>
-                  <th onclick="toggleDateSort()" class="py-2 px-3 text-center w-36 cursor-pointer hover:bg-[#386741] transition-all select-none group" title="点击切换：降序 (最新在前) ➔ 升序 (最早在前) ➔ 默认顺序">
+                  <th class="py-2.5 px-3 text-center w-14 whitespace-nowrap">序号</th>
+                  <th class="py-2.5 px-4 min-w-[200px]">操作内容</th>
+                  <th class="py-2.5 px-3 w-32 min-w-[110px] whitespace-nowrap">所属谱仪/系统</th>
+                  <th class="py-2.5 px-3 w-44 min-w-[150px] whitespace-nowrap text-left">工况参数 / 关键读数</th>
+                  <th class="py-2.5 px-3 text-center w-20 whitespace-nowrap">白/夜班</th>
+                  <th class="py-2.5 px-3 text-center w-16 whitespace-nowrap">次数</th>
+                  <th onclick="toggleDateSort()" class="py-2 px-3 text-center w-36 whitespace-nowrap cursor-pointer hover:bg-[#386741] transition-all select-none group" title="点击切换：降序 (最新在前) ➔ 升序 (最早在前) ➔ 默认顺序">
                     <div class="inline-flex items-center justify-center gap-1.5 w-full">
                       <span class="group-hover:text-emerald-200 transition-colors">操作时间</span>
                       <span id="dateSortIconWrapper" class="inline-flex items-center p-0.5 rounded bg-emerald-950/70 border border-emerald-500/40 text-emerald-300 group-hover:border-emerald-300 group-hover:scale-105 transition-all">
@@ -908,14 +909,14 @@
                       <span id="dateSortBadge" class="text-[10px] font-mono px-1 rounded bg-black/40 text-emerald-300/80">默认</span>
                     </div>
                   </th>
-                  <th class="py-2.5 px-4 w-36 min-w-[130px]">操作人</th>
-                  <th class="py-2.5 px-4 min-w-[140px]">备注</th>
-                  <th class="py-2.5 px-2 text-center w-16 bg-[#264a2d] text-emerald-100">操作</th>
+                  <th class="py-2.5 px-4 w-36 min-w-[120px] whitespace-nowrap">操作人</th>
+                  <th class="py-2.5 px-4 min-w-[120px]">备注</th>
+                  <th class="py-2.5 px-2 text-center w-16 bg-[#264a2d] text-emerald-100 whitespace-nowrap">操作</th>
                 </tr>
               </thead>
               <tbody id="assistTableBody" class="divide-y divide-slate-800/80 font-sans">
                 <tr>
-                  <td colspan="9" class="py-12 text-center text-slate-500">
+                  <td colspan="10" class="py-12 text-center text-slate-500">
                     <i class="ph ph-spinner ph-spin text-2xl block mb-2 opacity-50"></i>
                     正在加载协助台账...
                   </td>
@@ -1473,9 +1474,9 @@
   <div id="modalAddAssist" class="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
     <div class="bg-[#0f172a] border border-emerald-500/40 rounded-xl w-full max-w-lg shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-150 text-xs">
       <div class="p-4 bg-slate-900 border-b border-slate-800 flex items-center justify-between">
-        <div class="flex items-center gap-2 text-emerald-400 font-bold text-sm">
+            <div class="flex items-center gap-2 text-emerald-400 font-bold text-sm">
           <i class="ph ph-plus-circle text-lg"></i>
-          <span>登记谱仪协助工作记录 (追加至Excel台账)</span>
+              <span id="assistModalTitle">登记谱仪协助工作记录 (追加至Excel台账)</span>
         </div>
         <button onclick="closeAddAssistModal()" class="text-slate-400 hover:text-white"><i class="ph ph-x text-lg"></i></button>
       </div>
@@ -1533,6 +1534,14 @@
               </label>
             </div>
           </div>
+        </div>
+
+        <div>
+          <div class="flex items-center justify-between gap-2 mb-1">
+            <label class="block text-slate-400 font-semibold text-xs">工况参数 / 关键读数 (选填)</label>
+            <span id="paramHintText" class="text-[10px] text-amber-400 font-mono text-right">大气谱仪建议填写屏蔽门/准直器状态</span>
+          </div>
+          <input type="text" id="modalInputParamCondition" maxlength="255" placeholder="如：屏蔽门开度 100% / 准直器 2# 工况对中..." class="w-full bg-slate-950 border border-slate-700 rounded-lg p-2 text-slate-100 font-mono text-xs focus:outline-none focus:border-emerald-500">
         </div>
 
         <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -4965,6 +4974,7 @@
     let assistCategories = [];
     let currentAssistSubTab = 'all';
     let assistDateSortDirection = 'none';
+    let editingAssistId = null;
     const assistOperatorRoster = ['王健威', '王征', '汪静', '钟嘉充', '叶培钊', '周科', '徐锦鸿', '张文翔', '曾智蓉', '黄清辉'];
     let selectedAssistOperators = ['王健威', '王征'];
     let assistSpectrometerList = [
@@ -4978,6 +4988,21 @@
         .replace(/>/g, '&gt;')
         .replace(/"/g, '&quot;')
         .replace(/'/g, '&#39;');
+    }
+
+    function formatAssistShiftDate(value) {
+      const match = String(value || '').match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})/);
+      if (!match) return '';
+      return `${match[1]}/${Number(match[2])}/${Number(match[3])}`;
+    }
+
+    function isCurrentShiftRecord(record) {
+      if (!record || !currentShift) return false;
+      if (record.created_shift_id != null) return Number(record.created_shift_id) === Number(currentShift.id);
+      const activeDate = formatAssistShiftDate(currentShift.shift_date);
+      const recordDate = formatAssistShiftDate(record.date);
+      const activeShift = isDayShift ? '白班' : '夜班';
+      return Boolean(activeDate && recordDate && activeDate === recordDate && record.shift === activeShift);
     }
 
     async function loadAssistData() {
@@ -5000,7 +5025,7 @@
       } catch (error) {
         const tbody = document.getElementById('assistTableBody');
         if (tbody) {
-          tbody.innerHTML = `<tr><td colspan="9" class="py-10 text-center text-rose-300">台账加载失败：${escapeAssistHtml(error.message)}</td></tr>`;
+          tbody.innerHTML = `<tr><td colspan="10" class="py-10 text-center text-rose-300">台账加载失败：${escapeAssistHtml(error.message)}</td></tr>`;
         }
         showToast(`⚠️ 协助台账加载失败：${error.message}`);
       }
@@ -5061,19 +5086,49 @@
       renderAssistTable();
     }
 
-    function renderAssistCategoryOptions() {
+    function renderAssistCategoryOptions(selectedCategoryId) {
       const container = document.getElementById('modalCategoryRadiosContainer');
       if (!container) return;
       if (!assistCategories.length) {
         container.innerHTML = '<span class="text-slate-500 text-[11px]">暂无业务分类</span>';
         return;
       }
-      const selected = currentAssistSubTab !== 'all' ? currentAssistSubTab : assistCategories[0].id;
+      const fallback = currentAssistSubTab !== 'all' ? currentAssistSubTab : assistCategories[0].id;
+      const selected = assistCategories.some(cat => cat.id === selectedCategoryId) ? selectedCategoryId : fallback;
       container.innerHTML = assistCategories.map(cat => `
         <label class="flex items-center gap-2 px-2.5 py-2 rounded-lg bg-slate-950/70 border border-slate-700/80 hover:border-emerald-500/40 cursor-pointer min-w-0">
           <input type="radio" name="assistCategory" value="${escapeAssistHtml(cat.id)}" ${cat.id === selected ? 'checked' : ''} class="text-emerald-500 focus:ring-0">
           <span class="text-xs text-slate-200 truncate">${escapeAssistHtml(cat.badge || '')} ${escapeAssistHtml(cat.name)}</span>
         </label>`).join('');
+      container.querySelectorAll('input[name="assistCategory"]').forEach(radio => {
+        radio.addEventListener('change', updateAssistParamHint);
+      });
+      updateAssistParamHint();
+    }
+
+    const ASSIST_PARAM_HINTS = {
+      anis: {
+        placeholder: '如：屏蔽门开度 100% / 准直器 2# 工况对中 / 样品台多维对准',
+        hint: '⚠️ 建议记录屏蔽门开闭状态或准直器工况'
+      },
+      sample: {
+        placeholder: '选填，如：粗抽 48 Pa (<50Pa门槛) / CCR-06 刻线对齐',
+        hint: '选填，可记录抽真空读数或温控状态'
+      },
+      other: {
+        placeholder: '选填，如：分子泵 820Hz / 剂量率 0.12 μSv/h / 运行频率',
+        hint: '选填，记录现场重要测量参数'
+      }
+    };
+
+    function updateAssistParamHint() {
+      const input = document.getElementById('modalInputParamCondition');
+      const hint = document.getElementById('paramHintText');
+      if (!input || !hint) return;
+      const checked = document.querySelector('input[name="assistCategory"]:checked');
+      const meta = ASSIST_PARAM_HINTS[checked ? checked.value : ''] || ASSIST_PARAM_HINTS.other;
+      input.placeholder = meta.placeholder;
+      hint.innerText = meta.hint;
     }
 
     function renderAssistSpectrometerOptions(selectedValue) {
@@ -5114,6 +5169,10 @@
     function openAddAssistModal() {
       if (currentUser.role === 'viewer') return showToast('⚠️ 权限拦截：只读观察员不可登记协助台账');
       if (!assistCategories.length) return showToast('请先新增业务分类后再登记');
+      editingAssistId = null;
+      setAssistModalMode('create');
+      const paramInput = document.getElementById('modalInputParamCondition');
+      if (paramInput) paramInput.value = '';
       renderAssistCategoryOptions();
       renderAssistSpectrometerOptions();
       renderAssistOperatorChips();
@@ -5122,6 +5181,52 @@
 
     function closeAddAssistModal() {
       document.getElementById('modalAddAssist').classList.add('hidden');
+      editingAssistId = null;
+      setAssistModalMode('create');
+    }
+
+    function setAssistModalMode(mode, record) {
+      const title = document.getElementById('assistModalTitle');
+      const submit = document.getElementById('btnSubmitAssist');
+      if (title) {
+        title.innerText = mode === 'edit'
+          ? `✏️ 更正/编辑谱仪协助记录 (序号 #${record.id})`
+          : '登记谱仪协助工作记录 (追加至Excel台账)';
+      }
+      if (submit) {
+        submit.innerText = mode === 'edit' ? '确认保存修改' : '确认追加到台账';
+      }
+    }
+
+    function openEditAssistModal(id) {
+      const rec = assistRecords.find(item => item.id === id);
+      if (!rec) return;
+      if (currentUser.role === 'viewer') return showToast('⚠️ 权限拦截：只读观察员不可编辑协助台账');
+      if (currentUser.role !== 'admin' && !isCurrentShiftRecord(rec)) {
+        showToast('⚠️ 权限受限：该记录所属班次已归档封存，仅系统管理员 (Admin) 允许修正！');
+        return;
+      }
+
+      editingAssistId = id;
+      renderAssistCategoryOptions(rec.category);
+      renderAssistSpectrometerOptions(rec.spec);
+      selectedAssistOperators = String(rec.operators || '')
+        .split('、')
+        .map(name => name.trim())
+        .filter(name => name);
+      renderAssistOperatorChips();
+
+      document.getElementById('modalInputContent').value = rec.action || '';
+      document.getElementById('modalInputParamCondition').value = rec.param_condition || '';
+      document.getElementById('modalInputCount').value = rec.count || '';
+      document.getElementById('modalInputDate').value = rec.date || '';
+      document.getElementById('modalInputNotes').value = rec.notes || '';
+      const shiftRadio = document.querySelector(`input[name="modalInputShift"][value="${rec.shift}"]`);
+      if (shiftRadio) shiftRadio.checked = true;
+
+      setAssistModalMode('edit', rec);
+      updateAssistParamHint();
+      document.getElementById('modalAddAssist').classList.remove('hidden');
     }
 
     async function handleFormSubmitAssist(event) {
@@ -5135,6 +5240,7 @@
         category_id: categoryRadio ? categoryRadio.value : (assistCategories[0] || {}).id,
         action_content: document.getElementById('modalInputContent').value.trim(),
         spectrometer: document.getElementById('modalInputSpectrometer').value,
+        param_condition: document.getElementById('modalInputParamCondition').value.trim(),
         shift_type: shiftRadio ? shiftRadio.value : '白班',
         count_val: document.getElementById('modalInputCount').value.trim() || '1',
         op_date: document.getElementById('modalInputDate').value.trim(),
@@ -5144,23 +5250,36 @@
       if (!payload.category_id || !payload.action_content || !payload.spectrometer || !operators) {
         return showToast('请完整填写业务分类、操作内容、谱仪系统与操作人');
       }
-      if (button) { button.disabled = true; button.innerText = '正在写入台账...'; }
+      const editId = editingAssistId;
+      if (button) { button.disabled = true; button.innerText = editId ? '正在保存修改...' : '正在写入台账...'; }
       try {
-        const created = await apiRequest('/spectrometer-assists', { method: 'POST', body: payload });
-        assistRecords.push(created);
-        assistRecords.sort((a, b) => a.id - b.id);
+        if (editId) {
+          const updated = await apiRequest(`/spectrometer-assists/${editId}`, { method: 'PATCH', body: payload });
+          const index = assistRecords.findIndex(item => item.id === editId);
+          if (index >= 0) assistRecords[index] = updated;
+        } else {
+          const created = await apiRequest('/spectrometer-assists', { method: 'POST', body: payload });
+          assistRecords.push(created);
+          assistRecords.sort((a, b) => a.id - b.id);
+        }
         syncAssistSpectrometers();
         renderAssistTable();
         renderAssistCategoryTabs();
         updateAssistMetricCounts();
         closeAddAssistModal();
         document.getElementById('modalInputContent').value = '';
+        document.getElementById('modalInputParamCondition').value = '';
         document.getElementById('modalInputNotes').value = '';
-        showToast(`✅ 已成功追加第 ${created.id} 条谱仪协助记录 (${created.operators})`);
+        showToast(editId
+          ? `✅ 成功更正序号 #${editId} 谱仪协助记录！`
+          : `✅ 已成功追加第 ${assistRecords[assistRecords.length - 1].id} 条谱仪协助记录 (${operators})`);
       } catch (error) {
         showToast(`⚠️ ${error.message}`);
       } finally {
-        if (button) { button.disabled = false; button.innerText = '确认追加到台账'; }
+        if (button) {
+          button.disabled = false;
+          button.innerText = editingAssistId ? '确认保存修改' : '确认追加到台账';
+        }
       }
     }
 
@@ -5217,7 +5336,7 @@
         if (currentAssistSubTab !== 'all' && record.category !== currentAssistSubTab) return false;
         if (shiftFilter !== 'all' && record.shift !== shiftFilter) return false;
         if (keyword) {
-          const haystack = `${record.action} ${record.spec} ${record.operators} ${record.notes} ${record.date}`.toLowerCase();
+          const haystack = `${record.action} ${record.spec} ${record.param_condition || ''} ${record.operators} ${record.notes} ${record.date}`.toLowerCase();
           if (!haystack.includes(keyword)) return false;
         }
         return true;
@@ -5244,14 +5363,14 @@
       if (countInfo) countInfo.innerText = `匹配 ${filtered.length} 条记录 (总计 ${assistRecords.length} 项)`;
       if (!filtered.length) {
         tbody.innerHTML = `
-          <tr><td colspan="9" class="py-12 text-center text-slate-500">
+          <tr><td colspan="10" class="py-12 text-center text-slate-500">
             <i class="ph ph-magnifying-glass text-2xl block mb-2 opacity-50"></i>
             未检索到符合条件的谱仪协助记录
           </td></tr>`;
         updateAssistMetricCounts();
         return;
       }
-      const canDelete = currentUser.role === 'admin';
+      const role = currentUser.role;
       tbody.innerHTML = filtered.map(record => {
         const shiftBadge = record.shift === '夜班'
           ? '<span class="px-2 py-0.5 rounded text-[11px] font-semibold bg-sky-500/15 text-sky-300 border border-sky-500/30">夜班</span>'
@@ -5265,19 +5384,43 @@
             <td class="py-2.5 px-3 text-center font-mono font-bold text-slate-400 bg-slate-900/30">${record.id}</td>
             <td class="py-2.5 px-4 font-medium text-white">${escapeAssistHtml(record.action)}</td>
             <td class="py-2.5 px-3 ${specColor}">${escapeAssistHtml(record.spec)}</td>
+            <td class="py-2.5 px-3 font-mono text-cyan-300 text-xs">${escapeAssistHtml(record.param_condition || '-')}</td>
             <td class="py-2.5 px-3 text-center">${shiftBadge}</td>
             <td class="py-2.5 px-3 text-center font-mono font-bold text-emerald-400">${escapeAssistHtml(record.count || '-')}</td>
             <td class="py-2.5 px-3 text-center font-mono text-slate-300">${escapeAssistHtml(record.date)}</td>
             <td class="py-2.5 px-4 text-slate-200 font-medium">${escapeAssistHtml(record.operators)}</td>
             <td class="py-2.5 px-4 text-slate-400 text-[11px] truncate max-w-[160px]">${escapeAssistHtml(record.notes || '-')}</td>
-            <td class="py-2.5 px-2 text-center">
-              ${canDelete
-                ? `<button onclick="deleteAssistRecord(${record.id})" class="text-slate-400 hover:text-rose-400 p-1 rounded hover:bg-rose-500/10 transition-colors" title="删除该条记录"><i class="ph ph-trash text-sm"></i></button>`
-                : '<span class="text-[10px] text-slate-600">只读</span>'}
-            </td>
+            <td class="py-2.5 px-2 text-center whitespace-nowrap">${renderAssistActionCell(record, role)}</td>
           </tr>`;
       }).join('');
       updateAssistMetricCounts();
+    }
+
+    function renderAssistActionCell(record, role) {
+      if (role === 'admin') {
+        return `
+          <button onclick="openEditAssistModal(${record.id})" class="text-slate-400 hover:text-sky-400 p-1 rounded hover:bg-sky-500/10 transition-colors mr-1" title="管理员全权编辑">
+            <i class="ph ph-pencil-simple text-sm"></i>
+          </button>
+          <button onclick="deleteAssistRecord(${record.id})" class="text-slate-400 hover:text-rose-400 p-1 rounded hover:bg-rose-500/10 transition-colors" title="管理员删除">
+            <i class="ph ph-trash text-sm"></i>
+          </button>`;
+      }
+      if (role === 'operator') {
+        if (isCurrentShiftRecord(record)) {
+          return `
+            <button onclick="openEditAssistModal(${record.id})" class="text-emerald-400 hover:text-emerald-300 px-2 py-0.5 rounded bg-emerald-500/10 border border-emerald-500/30 text-[11px] font-medium inline-flex items-center gap-1 transition-all" title="当班允许更正与补填">
+              <i class="ph ph-pencil-simple"></i>
+              <span>更正</span>
+            </button>`;
+        }
+        return `
+          <span title="历史班次已归档锁定，仅系统管理员可修改" class="cursor-not-allowed inline-flex items-center gap-1 text-[11px] text-slate-500 select-none">
+            <i class="ph ph-lock-key"></i>
+            <span class="text-[10px]">已归档</span>
+          </span>`;
+      }
+      return '<span class="text-slate-600 text-[11px] inline-flex items-center gap-1"><i class="ph ph-lock-simple"></i> 只读</span>';
     }
 
     async function deleteAssistRecord(recordId) {
@@ -5318,12 +5461,13 @@
     function exportAssistCSV() {
       const rows = getFilteredAssistRecords();
       const escapeCsvCell = value => `"${String(value == null ? '' : value).replace(/"/g, '""')}"`;
-      const lines = ['序号,操作内容,所属谱仪/系统,白/夜班,次数,操作时间,操作人,备注'];
+      const lines = ['序号,操作内容,所属谱仪/系统,工况参数,白/夜班,次数,操作时间,操作人,备注'];
       rows.forEach(record => {
         lines.push([
           record.id,
           escapeCsvCell(record.action),
           escapeCsvCell(record.spec),
+          escapeCsvCell(record.param_condition || ''),
           escapeCsvCell(record.shift),
           escapeCsvCell(record.count),
           escapeCsvCell(record.date),

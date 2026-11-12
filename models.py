@@ -225,6 +225,9 @@ class SpectrometerAssist(Base):
     __tablename__ = "spectrometer_assists"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    created_shift_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("duty_shifts.id", ondelete="SET NULL"), index=True, nullable=True
+    )
     category_id: Mapped[str] = mapped_column(
         ForeignKey("spectrometer_assist_categories.category_id", ondelete="RESTRICT"),
         index=True,
@@ -232,6 +235,7 @@ class SpectrometerAssist(Base):
     )
     action_content: Mapped[str] = mapped_column(Text, nullable=False)
     spectrometer: Mapped[str] = mapped_column(String(160), index=True, nullable=False)
+    param_condition: Mapped[str] = mapped_column(String(255), default="", nullable=False)
     shift_type: Mapped[str] = mapped_column(String(10), index=True, nullable=False)
     count_val: Mapped[str] = mapped_column(String(20), default="1", nullable=False)
     op_date: Mapped[str] = mapped_column(String(20), index=True, nullable=False)
