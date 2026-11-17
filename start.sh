@@ -21,6 +21,31 @@ if [[ ! -x "$PYTHON_BIN" ]]; then
   exit 1
 fi
 
+check_vendor_assets() {
+  local missing=0
+  local required=(
+    "static/vendor/tailwindcss.js"
+    "static/vendor/html2pdf.bundle.min.js"
+    "static/vendor/phosphor/style.css"
+    "static/vendor/phosphor/Phosphor.woff2"
+    "static/vendor/fontawesome/css/all.min.css"
+    "static/vendor/fontawesome/webfonts/fa-solid-900.woff2"
+    "static/vendor/three/three.min.js"
+    "static/vendor/three/OrbitControls.js"
+  )
+  for asset in "${required[@]}"; do
+    if [[ ! -s "$asset" ]]; then
+      echo "[ops-erp] 缺少离线静态资源: $asset" >&2
+      missing=1
+    fi
+  done
+  if [[ "$missing" -ne 0 ]]; then
+    echo "[ops-erp] 纯内网部署要求本地资源齐全，请补充 static/vendor 后再启动" >&2
+    exit 1
+  fi
+  echo "[ops-erp] 离线静态资源自检通过"
+}
+
 check_syntax() {
   echo "[ops-erp] 执行 Python 语法检查..."
   "$PYTHON_BIN" -m py_compile database.py models.py auth.py main.py
@@ -149,6 +174,7 @@ case "$ACTION" in
       echo "[ops-erp] 缺少依赖，请执行: $PYTHON_BIN -m pip install fastapi uvicorn sqlalchemy" >&2
       exit 1
     fi
+    check_vendor_assets
     check_syntax
     init_database
     start_background

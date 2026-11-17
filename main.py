@@ -7,6 +7,7 @@ from typing import Literal, Optional
 from fastapi import Depends, FastAPI, HTTPException, Query, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import func, inspect, or_, select, text
 from sqlalchemy.orm import Session, selectinload
@@ -43,6 +44,7 @@ from models import (
 
 BASE_DIR = Path(__file__).resolve().parent
 INDEX_FILE = BASE_DIR / "index.html"
+STATIC_DIR = BASE_DIR / "static"
 STAGES = ("pending", "progress", "escalated", "closed")
 STAGE_NAMES = {
     "pending": "1. 待处理",
@@ -511,6 +513,10 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# 离线静态资源挂载：/static 前缀在全部业务路由之前注册，避免被通配路由遮挡
+if STATIC_DIR.is_dir():
+    app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
 
 class LoginPayload(BaseModel):
