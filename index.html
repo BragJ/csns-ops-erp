@@ -10,6 +10,11 @@
   <script src="https://unpkg.com/@phosphor-icons/web"></script>
   <!-- html2pdf.js for client-side instant PDF generation with watermark -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+  <!-- FontAwesome 6 (GraphRAG 3D 知识图谱模块) -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <!-- Three.js r128 & OrbitControls (GraphRAG 3D 知识图谱模块，按需使用) -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
   <script>
     tailwind.config = {
       darkMode: 'class',
@@ -30,6 +35,15 @@
               card: '#162238',
               border: '#1e293b',
               accent: '#38bdf8'
+            },
+            csns: {
+              space: '#020617',
+              hud: '#0b1329',
+              system: '#a855f7',
+              device: '#38bdf8',
+              event: '#f43f5e',
+              parameter: '#f59e0b',
+              manual: '#10b981'
             }
           }
         }
@@ -238,6 +252,54 @@
     @keyframes agentCaretBlink {
       50% { opacity: 0; }
     }
+    /* ========== GraphRAG 3D 知识图谱（作用域限定） ========== */
+    #view-graphrag {
+      background-color: #020617;
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    }
+    #view-graphrag.mono,
+    #view-graphrag .mono {
+      font-family: 'JetBrains Mono', monospace;
+    }
+    #view-graphrag .glass-panel {
+      background: rgba(11, 19, 41, 0.90);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      border: 1px solid rgba(56, 189, 248, 0.22);
+      box-shadow: 0 10px 40px 0 rgba(0, 0, 0, 0.7);
+    }
+    #view-graphrag .glow-cyan {
+      box-shadow: 0 0 25px rgba(56, 189, 248, 0.5);
+    }
+    #view-graphrag .glow-red {
+      box-shadow: 0 0 30px rgba(244, 63, 94, 0.6);
+    }
+    @keyframes graphRagPulseRedline {
+      0%, 100% { border-color: rgba(244, 63, 94, 0.95); box-shadow: 0 0 25px rgba(244, 63, 94, 0.65); }
+      50% { border-color: rgba(244, 63, 94, 0.35); box-shadow: 0 0 8px rgba(244, 63, 94, 0.2); }
+    }
+    #view-graphrag .redline-active {
+      animation: graphRagPulseRedline 1.6s infinite;
+    }
+    @keyframes graphRagHighlightFlash {
+      0%, 100% { background-color: transparent; }
+      50% { background-color: rgba(56, 189, 248, 0.15); }
+    }
+    #view-graphrag .flash-box {
+      animation: graphRagHighlightFlash 1.2s ease-in-out;
+    }
+    #view-graphrag:not(.hidden) {
+      display: flex;
+    }
+    #view-graphrag #webgl-container canvas {
+      display: block;
+      width: 100% !important;
+      height: 100% !important;
+    }
+    #mainContainer.graphrag-mode {
+      padding: 0 !important;
+      overflow: hidden !important;
+    }
   </style>
 </head>
 <body class="bg-[#090d16] text-slate-100 min-h-screen flex flex-col antialiased selection:bg-sky-500 selection:text-white">
@@ -370,7 +432,14 @@
           <span class="hidden md:inline truncate">谱仪协作与SOP向导</span>
         </button>
 
-        <!-- Tab 6: 智能 Agent 诊断中枢 -->
+        <!-- Tab 6: GraphRAG 3D 知识图谱 -->
+        <button onclick="switchTab('graphrag')" id="nav-graphrag" class="nav-btn w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-slate-300 hover:text-white hover:bg-slate-800/60 transition-all duration-150 border border-transparent">
+          <i class="ph ph-graph text-xl shrink-0"></i>
+          <span class="hidden md:inline truncate">GraphRAG 3D知识图谱</span>
+          <span class="ml-auto bg-purple-500/20 text-purple-300 text-[10px] font-mono px-1.5 py-0.5 rounded border border-purple-500/40 hidden md:inline">3D图谱</span>
+        </button>
+
+        <!-- Tab 7: 智能 Agent 诊断中枢 -->
         <button onclick="switchTab('agent')" id="nav-agent" class="nav-btn w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-slate-300 hover:text-white hover:bg-slate-800/60 transition-all duration-150 border border-transparent">
           <i class="ph ph-cpu text-xl shrink-0"></i>
           <span class="hidden md:inline truncate">智能Agent中枢</span>
@@ -1153,8 +1222,401 @@
       </section>
 
       <!-- ======================================================== -->
+      <!-- MODULE 6: GraphRAG 3D 知识图谱 (GRAPHRAG 3D KNOWLEDGE GRAPH) -->
       <!-- ======================================================== -->
-      <!-- MODULE 6: 智能 Agent 诊断中枢 (AI AGENT HUB) -->
+      <section id="view-graphrag" class="tab-view hidden w-full h-[calc(100vh-4rem)] flex-col overflow-hidden select-none bg-[#020617]">
+
+
+
+    <!-- Top Telemetry & Control Bar -->
+    <div class="h-14 glass-panel border-b border-cyan-500/20 flex items-center justify-between px-4 z-30 flex-shrink-0">
+      <div class="flex items-center space-x-3">
+        <div class="w-9 h-9 rounded-lg bg-gradient-to-tr from-cyan-600 via-indigo-600 to-purple-600 flex items-center justify-center text-white shadow-lg shadow-cyan-500/30">
+          <i class="fa-solid fa-network-wired text-lg animate-pulse"></i>
+        </div>
+        <div>
+          <div class="flex items-center space-x-2">
+            <span class="font-bold text-sm tracking-wide text-white">靶站谱仪 GraphRAG 3D 知识图谱立体空间</span>
+            <span class="text-[10px] px-1.5 py-0.5 rounded bg-purple-950/90 text-purple-300 border border-purple-700/60 mono font-semibold">五阶立体拓扑</span>
+          </div>
+          <p class="text-[11px] text-slate-400">系统 ➔ 设备 ➔ 异常事件 ➔ 关键参数 ➔ 操作规程 · 激光因果管线与关系标签</p>
+        </div>
+      </div>
+
+      <!-- Quick Entity Search & Dropdown Picker -->
+      <div class="hidden md:flex items-center space-x-2">
+        <div class="relative w-80">
+          <i class="fa-solid fa-magnifying-glass absolute left-2.5 top-2.5 text-xs text-slate-400"></i>
+          <input type="text" id="quick-entity-search" class="w-full bg-slate-900/90 border border-slate-700/80 rounded-lg pl-8 pr-3 py-1.5 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-cyan-400 focus:ring-1 focus:ring-cyan-400" placeholder="快速定位节点 (输入: 色谱仪, 50Pa, 粗抽, TC02)...">
+          <!-- Autocomplete Suggestions -->
+          <div id="quick-search-dropdown" class="absolute top-10 left-0 w-full glass-panel rounded-lg shadow-2xl border border-cyan-500/30 py-1 hidden max-h-64 overflow-y-auto z-50"></div>
+        </div>
+      </div>
+
+      <!-- Five Entity Indicators -->
+      <div class="hidden xl:flex items-center space-x-5 text-xs">
+        <div class="flex items-center space-x-1.5 cursor-pointer hover:opacity-80 transition" onclick="window.filterByTypeQuick('system')">
+          <span class="w-2.5 h-2.5 rounded-full bg-purple-500"></span>
+          <span class="text-slate-400">系统: <strong id="stat-system" class="text-purple-300 mono">0</strong></span>
+        </div>
+        <div class="flex items-center space-x-1.5 cursor-pointer hover:opacity-80 transition" onclick="window.filterByTypeQuick('device')">
+          <span class="w-2.5 h-2.5 rounded-full bg-sky-400"></span>
+          <span class="text-slate-400">设备: <strong id="stat-device" class="text-sky-300 mono">0</strong></span>
+        </div>
+        <div class="flex items-center space-x-1.5 cursor-pointer hover:opacity-80 transition" onclick="window.filterByTypeQuick('event')">
+          <span class="w-2.5 h-2.5 rounded-full bg-rose-500"></span>
+          <span class="text-slate-400">异常事件: <strong id="stat-event" class="text-rose-300 mono">0</strong></span>
+        </div>
+        <div class="flex items-center space-x-1.5 cursor-pointer hover:opacity-80 transition" onclick="window.filterByTypeQuick('parameter')">
+          <span class="w-2.5 h-2.5 rounded-full bg-amber-400"></span>
+          <span class="text-slate-400">关键参数: <strong id="stat-parameter" class="text-amber-300 mono">0</strong></span>
+        </div>
+        <div class="flex items-center space-x-1.5 cursor-pointer hover:opacity-80 transition" onclick="window.filterByTypeQuick('manual')">
+          <span class="w-2.5 h-2.5 rounded-full bg-emerald-500"></span>
+          <span class="text-slate-400">操作手册: <strong id="stat-manual" class="text-emerald-300 mono">0</strong></span>
+        </div>
+        <div class="flex items-center space-x-1.5 pl-2 border-l border-slate-700/60">
+          <span class="w-2 h-2 rounded-full bg-cyan-400 animate-ping"></span>
+          <span class="text-slate-400">帧率: <strong id="stat-fps" class="text-cyan-300 mono">60 FPS</strong></span>
+        </div>
+      </div>
+
+      <!-- Controls -->
+      <div class="flex items-center space-x-2">
+        <button id="btn-toggle-rotate" class="px-2.5 py-1.5 bg-slate-800/80 hover:bg-slate-700 text-slate-300 rounded border border-slate-700 text-xs flex items-center gap-1.5 transition">
+          <i class="fa-solid fa-rotate text-cyan-400" id="icon-rotate"></i>
+          <span id="text-rotate">全景巡航: 关</span>
+        </button>
+        <button id="btn-reset-cam" class="px-2.5 py-1.5 bg-slate-800/80 hover:bg-slate-700 text-slate-300 rounded border border-slate-700 text-xs flex items-center gap-1.5 transition">
+          <i class="fa-solid fa-arrows-to-dot text-cyan-400"></i>
+          <span>重置视角</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- Main Viewport Layout -->
+    <div class="flex-1 flex overflow-hidden relative">
+
+      <!-- Left Floating HUD: Filters & Spatial Controls -->
+      <div class="w-72 glass-panel border-r border-cyan-500/10 flex flex-col z-20 transition-all duration-300">
+      
+        <div class="p-3 border-b border-slate-800/80 flex items-center justify-between">
+          <span class="text-xs font-semibold uppercase tracking-wider text-slate-400 flex items-center gap-2">
+            <i class="fa-solid fa-layer-group text-purple-400"></i>
+            <span>五阶实体与空间维度</span>
+          </span>
+          <button id="btn-select-all" class="text-[11px] text-cyan-400 hover:underline">全选</button>
+        </div>
+
+        <div class="flex-1 overflow-y-auto p-3 space-y-4">
+
+          <!-- 3D Camera Presets -->
+          <div>
+            <label class="text-[11px] font-semibold text-slate-400 uppercase tracking-wider block mb-2">3D 摄像机战术视角瞬移</label>
+            <div class="grid grid-cols-2 gap-1.5 text-xs">
+              <button class="cam-preset-btn py-1.5 px-2 rounded bg-slate-800/70 hover:bg-cyan-950/80 border border-slate-700 text-slate-300 hover:text-cyan-300 flex items-center gap-1.5 transition" data-cam="galaxy">
+                <i class="fa-solid fa-globe text-cyan-400"></i> 阶梯全景俯瞰
+              </button>
+              <button class="cam-preset-btn py-1.5 px-2 rounded bg-slate-800/70 hover:bg-cyan-950/80 border border-slate-700 text-slate-300 hover:text-cyan-300 flex items-center gap-1.5 transition" data-cam="water">
+                <i class="fa-solid fa-droplet text-emerald-400"></i> 水冷色谱回路
+              </button>
+              <button class="cam-preset-btn py-1.5 px-2 rounded bg-slate-800/70 hover:bg-cyan-950/80 border border-slate-700 text-slate-300 hover:text-cyan-300 flex items-center gap-1.5 transition" data-cam="cryo">
+                <i class="fa-solid fa-snowflake text-sky-400"></i> 低温真空样品
+              </button>
+              <button class="cam-preset-btn py-1.5 px-2 rounded bg-slate-800/70 hover:bg-cyan-950/80 border border-slate-700 text-slate-300 hover:text-cyan-300 flex items-center gap-1.5 transition" data-cam="target">
+                <i class="fa-solid fa-atom text-rose-400"></i> 靶体与束流区
+              </button>
+            </div>
+          </div>
+
+          <!-- Five-tuple Entity Type Layer Filters -->
+          <div>
+            <div class="flex items-center justify-between mb-2">
+              <label class="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">五元组实体分层 (Vertical Tiers)</label>
+              <span class="text-[10px] text-slate-500">拓扑结构</span>
+            </div>
+            <div class="space-y-1.5" id="entity-filter-list">
+              <!-- Dynamically populated from ENTITY_CONFIG -->
+            </div>
+          </div>
+
+          <!-- Subsystem Clusters -->
+          <div>
+            <label class="text-[11px] font-semibold text-slate-400 uppercase tracking-wider block mb-2">所属系统星云扇区 (Subsystem Sectors)</label>
+            <div class="space-y-1.5" id="community-filter-list">
+              <!-- Dynamically populated from COMMUNITY_CONFIG -->
+            </div>
+          </div>
+
+          <!-- Spatial Display Toggles -->
+          <div class="pt-3 border-t border-slate-800/80 space-y-2.5 text-xs">
+            <div class="flex items-center justify-between text-slate-300">
+              <span class="flex items-center gap-1.5"><i class="fa-solid fa-link text-cyan-400"></i> 3D 关系文字标签</span>
+              <input type="checkbox" id="check-show-edge-labels" checked class="rounded border-slate-700 text-cyan-500 focus:ring-0 cursor-pointer">
+            </div>
+            <div class="flex items-center justify-between text-slate-300">
+              <span class="flex items-center gap-1.5"><i class="fa-solid fa-bolt text-amber-400"></i> 3D 激光脉冲流</span>
+              <input type="checkbox" id="check-show-particles" checked class="rounded border-slate-700 text-cyan-500 focus:ring-0 cursor-pointer">
+            </div>
+            <div class="flex items-center justify-between text-slate-300">
+              <span class="flex items-center gap-1.5"><i class="fa-solid fa-tags text-indigo-400"></i> 实体球体文字名称</span>
+              <input type="checkbox" id="check-show-labels" checked class="rounded border-slate-700 text-cyan-500 focus:ring-0 cursor-pointer">
+            </div>
+            <div class="flex items-center justify-between text-slate-300">
+              <span class="flex items-center gap-1.5"><i class="fa-solid fa-circle-nodes text-purple-400"></i> 系统扇区底座光盘</span>
+              <input type="checkbox" id="check-show-hulls" checked class="rounded border-slate-700 text-cyan-500 focus:ring-0 cursor-pointer">
+            </div>
+          </div>
+
+        </div>
+
+        <!-- Footer Info -->
+        <div class="p-3 bg-slate-900/90 border-t border-slate-800/80 text-[11px] text-slate-500 flex justify-between items-center">
+          <span>GraphRAG 5-Tier Ontology</span>
+          <span class="mono text-purple-400 font-semibold">CSNS Ops</span>
+        </div>
+      </div>
+
+      <!-- Center 3D WebGL Canvas Viewport -->
+      <div class="flex-1 relative h-full bg-[#020617] overflow-hidden">
+        <!-- 3D WebGL Canvas Container -->
+        <div id="webgl-container" class="w-full h-full block cursor-default"></div>
+
+        <!-- Floating 3D Navigation Guide HUD -->
+        <div class="absolute top-4 left-4 pointer-events-none flex flex-wrap gap-2 text-[11px] z-10">
+          <span class="px-2.5 py-1.5 glass-panel rounded-lg flex items-center gap-1.5 text-slate-300 shadow">
+            <i class="fa-solid fa-arrows-up-down-left-right text-cyan-400"></i> 旋转俯仰漫游 · 滚轮缩放 · 右键平移
+          </span>
+          <span class="px-2.5 py-1.5 glass-panel rounded-lg flex items-center gap-1.5 text-emerald-300 shadow border border-emerald-500/40">
+            <i class="fa-solid fa-crosshairs text-emerald-400"></i> 单击任意球体或浮动文字直接打开细节
+          </span>
+          <span class="px-2.5 py-1.5 glass-panel rounded-lg flex items-center gap-1.5 text-sky-300 shadow border border-sky-500/40">
+            <i class="fa-solid fa-link text-sky-400"></i> 连线上已清晰标注【属于/发生/触碰/执行】因果标签
+          </span>
+        </div>
+
+        <!-- Path Lighting Notification Banner -->
+        <div id="path-banner" class="absolute top-4 right-4 glass-panel border border-cyan-500/50 px-3.5 py-2.5 rounded-lg text-xs flex items-center space-x-3 hidden z-10 shadow-lg glow-cyan">
+          <span class="inline-block w-2.5 h-2.5 rounded-full bg-cyan-400 animate-ping"></span>
+          <span class="text-cyan-300 font-medium" id="path-banner-text">已点亮五阶因果拓扑链路</span>
+          <button id="btn-clear-path" class="text-slate-400 hover:text-white ml-2 text-sm"><i class="fa-solid fa-xmark"></i></button>
+        </div>
+
+        <!-- Centered On-Canvas Floating Detail HUD Card (Pops up immediately upon node click) -->
+        <div id="canvas-node-card" class="absolute top-16 right-6 w-84 glass-panel rounded-xl p-4 hidden z-20 shadow-2xl border border-cyan-400/60 glow-cyan transition-all duration-300">
+          <div class="flex items-start justify-between">
+            <div class="flex items-center space-x-2">
+              <span id="canvas-card-badge" class="px-2 py-0.5 rounded text-[10px] font-bold mono">系统</span>
+              <span id="canvas-card-comm" class="text-[10px] text-slate-400">所属集群</span>
+            </div>
+            <button id="canvas-card-close" class="text-slate-400 hover:text-white text-xs p-1">
+              <i class="fa-solid fa-xmark"></i>
+            </button>
+          </div>
+
+          <h3 id="canvas-card-title" class="text-sm font-bold text-white mt-1.5 tracking-wide">实体名称</h3>
+          <p id="canvas-card-desc" class="text-xs text-slate-300 mt-1 leading-relaxed max-h-24 overflow-y-auto">实体详细描述与工程事实...</p>
+
+          <!-- Five-tuple Breadcrumb preview -->
+          <div class="mt-3 pt-2.5 border-t border-slate-700/70 text-[11px] space-y-1">
+            <div class="flex items-center justify-between text-slate-400">
+              <span>五元组关联拓扑连线:</span>
+              <span id="canvas-card-degree" class="text-cyan-300 mono font-semibold">3 条关系</span>
+            </div>
+            <div id="canvas-card-chain" class="p-1.5 rounded bg-slate-900/80 border border-slate-800 text-[10px] text-slate-300 truncate">
+              --
+            </div>
+          </div>
+
+          <!-- Action Buttons -->
+          <div class="mt-3 flex items-center space-x-2">
+            <button id="canvas-card-focus-btn" class="flex-1 py-1.5 rounded bg-cyan-900/80 hover:bg-cyan-800 text-cyan-200 text-xs font-medium transition flex items-center justify-center gap-1">
+              <i class="fa-solid fa-crosshairs"></i> 聚焦镜头
+            </button>
+            <button id="canvas-card-full-btn" class="flex-1 py-1.5 rounded bg-purple-900/80 hover:bg-purple-800 text-purple-200 text-xs font-medium transition flex items-center justify-center gap-1">
+              <i class="fa-solid fa-list-check"></i> 查看完整因果
+            </button>
+          </div>
+        </div>
+
+        <!-- Active Selected Entity Floating Callout Card (Bottom Center) -->
+        <div id="active-entity-pill" class="absolute bottom-4 left-1/2 -translate-x-1/2 glass-panel border border-cyan-400/50 px-4 py-2 rounded-xl text-xs flex items-center space-x-3 hidden z-10 shadow-xl glow-cyan">
+          <div class="w-3 h-3 rounded-full bg-cyan-400 animate-pulse"></div>
+          <div>
+            <span class="text-slate-400 text-[10px] block">当前选定实体</span>
+            <span id="pill-entity-name" class="font-bold text-white text-xs">CCR-05恒温器</span>
+          </div>
+          <div class="h-6 w-px bg-slate-700 mx-1"></div>
+          <button id="pill-focus-btn" class="px-2 py-1 rounded bg-cyan-900/80 hover:bg-cyan-800 text-cyan-200 text-[11px] font-semibold transition">
+            <i class="fa-solid fa-crosshairs mr-1"></i>重新聚焦
+          </button>
+          <button id="pill-close-btn" class="text-slate-400 hover:text-slate-200 text-sm ml-1">
+            <i class="fa-solid fa-xmark"></i>
+          </button>
+        </div>
+
+        <!-- 3D Coordinates & Telemetry (Bottom Left) -->
+        <div class="absolute bottom-4 left-4 glass-panel px-3 py-1.5 rounded-lg text-xs text-slate-400 pointer-events-none flex items-center space-x-4 z-10">
+          <span>视距: <span id="lbl-cam-dist" class="mono text-cyan-300">520</span></span>
+          <span>聚焦目标: <span id="lbl-focus-target" class="mono text-purple-300">全域阶梯星云</span></span>
+        </div>
+
+        <!-- Hover Cursor Tooltip -->
+        <div id="hover-tooltip" class="absolute pointer-events-none hidden glass-panel px-2.5 py-1.5 rounded-md text-[11px] shadow-2xl z-30 border border-cyan-400/60 max-w-xs transition-opacity duration-150">
+          <span id="tooltip-type" class="px-1 py-0.2 rounded text-[9px] font-bold mono block mb-0.5"></span>
+          <strong id="tooltip-title" class="text-white block"></strong>
+          <span id="tooltip-desc" class="text-slate-300 text-[10px] block mt-0.5"></span>
+        </div>
+      </div>
+
+      <!-- Right Sci-Fi GraphRAG Workbench & Node Inspector -->
+      <div class="w-96 glass-panel border-l border-cyan-500/10 flex flex-col z-20 transition-all duration-300">
+      
+        <!-- Drawer Navigation Tabs -->
+        <div class="flex border-b border-slate-800 text-xs">
+          <button id="tab-btn-search" class="flex-1 py-3 font-semibold border-b-2 border-cyan-400 text-cyan-400 bg-slate-800/40 flex items-center justify-center gap-2">
+            <i class="fa-solid fa-magnifying-glass-chart"></i>
+            <span>GraphRAG 检索中枢</span>
+          </button>
+          <button id="tab-btn-inspector" class="flex-1 py-3 font-semibold border-b-2 border-transparent text-slate-400 hover:text-slate-300 flex items-center justify-center gap-2">
+            <i class="fa-solid fa-cube"></i>
+            <span>五元组实体因果视窗</span>
+          </button>
+        </div>
+
+        <!-- Content 1: GraphRAG Search Simulator -->
+        <div id="panel-search" class="flex-1 overflow-y-auto p-4 space-y-4">
+        
+          <!-- Search Mode Switch -->
+          <div>
+            <label class="text-[11px] font-semibold text-slate-400 uppercase tracking-wider block mb-1.5">检索范式 (Search Paradigm)</label>
+            <div class="grid grid-cols-2 gap-2 text-xs">
+              <button id="btn-mode-local" class="py-2 px-3 rounded-lg border border-cyan-500 bg-cyan-950/60 text-cyan-300 font-medium flex items-center justify-center gap-1.5 transition">
+                <i class="fa-solid fa-bullseye"></i>
+                <span>Local Search (局部穿透)</span>
+              </button>
+              <button id="btn-mode-global" class="py-2 px-3 rounded-lg border border-slate-700 bg-slate-800/60 text-slate-400 font-medium flex items-center justify-center gap-1.5 transition">
+                <i class="fa-solid fa-earth-americas"></i>
+                <span>Global (全局社区聚合)</span>
+              </button>
+            </div>
+            <p id="search-mode-desc" class="text-[11px] text-slate-400 mt-1.5 leading-relaxed">
+              <strong>Local Search</strong>：沿 3D 激光脉冲连线，点亮【系统 ➔ 设备 ➔ 异常 ➔ 参数 ➔ 规程】五阶因果闭环。
+            </p>
+          </div>
+
+          <!-- Quick Incident Presets (Directly mapped to 5-tuple structure) -->
+          <div>
+            <label class="text-[11px] font-semibold text-slate-400 uppercase tracking-wider block mb-1.5">现场五阶因果排故预设 (5-Tuple Incident Presets)</label>
+            <div class="space-y-1.5">
+              <button class="preset-btn w-full text-left p-2.5 rounded-lg bg-slate-800/70 hover:bg-slate-700/80 border border-slate-700/80 text-xs transition flex items-start gap-2" data-scenario="gc_h2">
+                <span class="text-emerald-400 mt-0.5"><i class="fa-solid fa-flask"></i></span>
+                <div class="flex-1">
+                  <span class="text-slate-200 font-medium block">水系统色谱仪：重水氢浓度突发超标 (>4%)</span>
+                  <span class="text-[10px] text-slate-400 block mt-0.5">水冷系统 ➔ 色谱仪 ➔ 氢超标 ➔ 4.0%防爆线 ➔ 手动排气SOP</span>
+                </div>
+              </button>
+              <button class="preset-btn w-full text-left p-2.5 rounded-lg bg-slate-800/70 hover:bg-slate-700/80 border border-slate-700/80 text-xs transition flex items-start gap-2" data-scenario="ccr_vac">
+                <span class="text-rose-400 mt-0.5"><i class="fa-solid fa-triangle-exclamation"></i></span>
+                <div class="flex-1">
+                  <span class="text-slate-200 font-medium block">低温系统CCR-05：粗抽停滞70Pa能否开分子泵？</span>
+                  <span class="text-[10px] text-slate-400 block mt-0.5">低温系统 ➔ CCR-05 ➔ 抽空卡滞 ➔ 50Pa门槛 ➔ 停泵保压SOP</span>
+                </div>
+              </button>
+              <button class="preset-btn w-full text-left p-2.5 rounded-lg bg-slate-800/70 hover:bg-slate-700/80 border border-slate-700/80 text-xs transition flex items-start gap-2" data-scenario="ls336_sensor">
+                <span class="text-amber-400 mt-0.5"><i class="fa-solid fa-temperature-arrow-up"></i></span>
+                <div class="flex-1">
+                  <span class="text-slate-200 font-medium block">低温系统LakeShore 336：Sensor Open通道开路</span>
+                  <span class="text-[10px] text-slate-400 block mt-0.5">低温系统 ➔ LS336 ➔ 通道开路 ➔ 450K耐温极限 ➔ 切断加热(Heater Off)</span>
+                </div>
+              </button>
+              <button class="preset-btn w-full text-left p-2.5 rounded-lg bg-slate-800/70 hover:bg-slate-700/80 border border-slate-700/80 text-xs transition flex items-start gap-2" data-scenario="beam_tilt">
+                <span class="text-purple-400 mt-0.5"><i class="fa-solid fa-wave-square"></i></span>
+                <div class="flex-1">
+                  <span class="text-slate-200 font-medium block">靶体系统反射体：TC02温度跃升65℃与束流打偏</span>
+                  <span class="text-[10px] text-slate-400 block mt-0.5">靶体慢化 ➔ 反射体 ➔ TC02超温 ➔ 65℃限值 ➔ RTBT调束规程</span>
+                </div>
+              </button>
+              <button class="preset-btn w-full text-left p-2.5 rounded-lg bg-slate-800/70 hover:bg-slate-700/80 border border-slate-700/80 text-xs transition flex items-start gap-2" data-scenario="ht_leak">
+                <span class="text-rose-500 mt-0.5"><i class="fa-solid fa-faucet-drip"></i></span>
+                <div class="flex-1">
+                  <span class="text-slate-200 font-medium block">靶站氦容器：音叉液位计2秒积满400ml大泄漏</span>
+                  <span class="text-[10px] text-slate-400 block mt-0.5">水冷公用 ➔ 氦容器 ➔ 大漏水 ➔ 400ml容积 ➔ 停机保压排水分段检修</span>
+                </div>
+              </button>
+              <button class="preset-btn w-full text-left p-2.5 rounded-lg bg-slate-800/70 hover:bg-slate-700/80 border border-slate-700/80 text-xs transition flex items-start gap-2" data-scenario="global_h2">
+                <span class="text-sky-400 mt-0.5"><i class="fa-solid fa-chart-pie"></i></span>
+                <div class="flex-1">
+                  <span class="text-slate-200 font-medium block">全局报告：历年水冷色谱异常与氢浓度虚警演进</span>
+                  <span class="text-[10px] text-slate-400 block mt-0.5">Map-Reduce 跨年度社区聚合提炼全局演化报告</span>
+                </div>
+              </button>
+            </div>
+          </div>
+
+          <!-- Custom Input -->
+          <div>
+            <label class="text-[11px] font-semibold text-slate-400 uppercase tracking-wider block mb-1.5">自由运维排故语义查询</label>
+            <div class="relative">
+              <textarea id="search-input" rows="2" class="w-full bg-slate-900/90 border border-slate-700 rounded-lg p-2.5 text-xs text-slate-100 placeholder-slate-500 focus:outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500" placeholder="输入任意设备、报警事件、判定参数或手册..."></textarea>
+              <button id="btn-run-search" class="w-full mt-2 py-2 bg-gradient-to-r from-purple-600 via-sky-600 to-emerald-600 hover:from-purple-500 hover:to-emerald-500 text-white text-xs font-semibold rounded-lg shadow-md transition flex items-center justify-center gap-1.5">
+                <i class="fa-solid fa-play"></i>
+                <span>执行 GraphRAG 五阶因果空间推理</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- Query Output Card -->
+          <div id="query-result-box" class="space-y-3 pt-1">
+            <!-- Dynamically populated -->
+          </div>
+
+        </div>
+
+        <!-- Content 2: 3D Node & Edge Inspector (Five-Tuple Inspector) -->
+        <div id="panel-inspector" class="flex-1 overflow-y-auto p-4 space-y-4 hidden">
+          <div id="inspector-placeholder" class="text-center py-16 text-slate-500 text-xs">
+            <i class="fa-solid fa-cube text-4xl mb-3 text-slate-600 block animate-bounce"></i>
+            <span>在 3D 空间中点击任意实体球体<br>自动展开【系统 | 设备 | 异常 | 参数 | 手册】五元组全要素卡片</span>
+          </div>
+
+          <div id="inspector-content" class="hidden space-y-4">
+            <!-- Dynamically populated entity details -->
+          </div>
+        </div>
+
+      </div>
+
+    </div>
+
+    <!-- Global Redline Modal Intercept (Stop-Work Directive) -->
+    <div id="redline-modal" class="fixed inset-0 bg-black/75 backdrop-blur-md z-50 flex items-center justify-center p-4 hidden">
+      <div class="bg-slate-900 border-2 border-rose-500 redline-active rounded-xl max-w-lg w-full p-5 shadow-2xl glow-red">
+        <div class="flex items-start space-x-3">
+          <div class="w-11 h-11 rounded-full bg-rose-500/20 text-rose-400 flex items-center justify-center text-xl flex-shrink-0">
+            <i class="fa-solid fa-hand"></i>
+          </div>
+          <div class="flex-1">
+            <h3 class="text-base font-bold text-rose-400 tracking-wide uppercase">刚性安全止损红线指令 (STOP-WORK REDLINE)</h3>
+            <p class="text-xs text-rose-200 mt-1 font-medium" id="redline-title">检测到违背安全参数边界的违规操作动作</p>
+          </div>
+        </div>
+        <div class="mt-4 p-3 bg-rose-950/40 border border-rose-800/80 rounded-lg text-xs text-rose-100 leading-relaxed space-y-2">
+          <div id="redline-body"></div>
+        </div>
+        <div class="mt-4 flex justify-end space-x-2">
+          <button id="btn-close-redline" class="px-4 py-1.5 bg-rose-600 hover:bg-rose-500 text-white text-xs font-semibold rounded-lg transition">
+            我已知晓并严格执行规程
+          </button>
+        </div>
+      </div>
+    </div>
+
+      </section>
+
+      <!-- ======================================================== -->
+      <!-- ======================================================== -->
+      <!-- MODULE 7: 智能 Agent 诊断中枢 (AI AGENT HUB) -->
       <!-- ======================================================== -->
       <section id="view-agent" class="tab-view hidden h-[calc(100vh-6rem)] flex-col overflow-hidden bg-[#090d16]">
         <div class="h-16 shrink-0 bg-[#162238] border border-slate-800 rounded-xl px-4 mb-3 flex items-center justify-between gap-3 shadow-lg shadow-black/30">
@@ -3138,7 +3600,16 @@
       }
 
       const mainContainer = document.getElementById('mainContainer');
-      if (mainContainer) mainContainer.classList.toggle('agent-mode', tabKey === 'agent');
+      if (mainContainer) {
+        mainContainer.classList.toggle('agent-mode', tabKey === 'agent');
+        mainContainer.classList.toggle('graphrag-mode', tabKey === 'graphrag');
+      }
+      if (tabKey === 'graphrag') {
+        if (window.GraphRAGApp) {
+          window.GraphRAGApp.init();
+          setTimeout(() => window.GraphRAGApp.resize(), 60);
+        }
+      }
       if (tabKey === 'agent') renderAgentWorkspace();
       if (tabKey === 'assist') {
         renderAssistCategoryTabs();
@@ -6930,6 +7401,1580 @@
         showLoginGate();
       }
     });
+  </script>
+  <!-- ================= GraphRAG 3D 知识图谱（独立作用域，避免全局污染） ================= -->
+  <script>
+  (function () {
+    'use strict';
+
+    // --- 1. Five-Tuple Entity Ontology Configuration ---
+    const ENTITY_CONFIG = {
+      system:    { label: '系统 (System)',    color: 0xa855f7, hex: '#a855f7', count: 0, layer: 0, yOffset: 120, desc: '装置顶层专业分系统与公用工程回路' },
+      device:    { label: '设备 (Device)',    color: 0x38bdf8, hex: '#38bdf8', count: 0, layer: 1, yOffset: 55,  desc: '关键机械装备、温控表、谱仪斩波器与主控仪器' },
+      event:     { label: '异常事件 (Event)', color: 0xf43f5e, hex: '#f43f5e', count: 0, layer: 2, yOffset: -5,  desc: '原子级故障现象、中控报警代码与失水微漏事件' },
+      parameter: { label: '关键参数 (Param)', color: 0xf59e0b, hex: '#f59e0b', count: 0, layer: 3, yOffset: -65, desc: '防爆阈值、真空启泵门槛、耐温上限与保护判定参数' },
+      manual:    { label: '操作手册 (Manual)',color: 0x10b981, hex: '#10b981', count: 0, layer: 4, yOffset: -125,desc: '标准处置规程 (SOP)、排故操作卡与刚性红线禁止令' }
+    };
+
+    // Subsystem Community Sectors in 3D Space (Ordered logically)
+    const COMMUNITY_CONFIG = {
+      comm_water:   { name: 'S1: 水冷与色谱保护系统', color: 0x10b981, hex: '#10b981', angle: -2.35, radius: 175 },
+      comm_cryo:    { name: 'S2: 谱仪低温真空系统', color: 0x38bdf8, hex: '#38bdf8', angle: -0.85, radius: 175 },
+      comm_target:  { name: 'S3: 靶体热负荷与束流系统', color: 0xf43f5e, hex: '#f43f5e', angle: 0.0,   radius: 170 },
+      comm_spec:    { name: 'S4: 谱仪斩波器与探测系统', color: 0xa855f7, hex: '#a855f7', angle: 0.95,  radius: 175 },
+      comm_pps:     { name: 'S5: 供气与辐射安全系统', color: 0xf59e0b, hex: '#f59e0b', angle: 2.30,  radius: 175 }
+    };
+
+    // --- 2. Five-Tuple Entity Dataset (Derived directly from user discussion & CSNS logs) ---
+    const RAW_NODES = [
+      // === 1. 系统 (System) ===
+      { id: 'SYS_WATER', name: '公用工程水冷系统', type: 'system', comm: 'comm_water', size: 12, desc: '包含重水主循环、轻水回路及放射性保护气监测回路' },
+      { id: 'SYS_CRYO', name: '谱仪低温样品系统', type: 'system', comm: 'comm_cryo', size: 12, desc: '提供 4K-700K 变温环境，含 CCR 系列恒温器与真空机组' },
+      { id: 'SYS_TARGET', name: '靶体与慢化器系统', type: 'system', comm: 'comm_target', size: 12, desc: '散裂靶站核心受照热负荷区，含钨靶、重水冷却与反射体' },
+      { id: 'SYS_CHOPPER', name: '中子斩波器系统', type: 'system', comm: 'comm_spec', size: 12, desc: '谱仪中子能谱调制与飞行时间精细选能旋转设备群' },
+      { id: 'SYS_GAS', name: '大厅集中供气系统', type: 'system', comm: 'comm_pps', size: 11, desc: '为全站提供高纯氩气、高纯氦气及深冷液氮集中管网' },
+      { id: 'SYS_PPS', name: '辐射安全与联锁系统', type: 'system', comm: 'comm_pps', size: 11, desc: '涵盖 PPS 人员人身安全联锁、TPS 靶保护及中子快门' },
+
+      // === 2. 设备 (Device) ===
+      { id: 'DEV_GC', name: '重水在线气相色谱仪(GC)', type: 'device', comm: 'comm_water', size: 10, desc: '色谱柱+TCD热导检测器，连续在线分析保护气氢浓度' },
+      { id: 'DEV_HWS_BOX', name: '重水波动箱', type: 'device', comm: 'comm_water', size: 9, desc: '重水冷却回路稳压与气体缓冲容器，测点 HPGCHT01/HWSLT01' },
+      { id: 'DEV_HT_VESSEL', name: '靶站氦容器', type: 'device', comm: 'comm_water', size: 10, desc: '靶体与反射体外围大型密封壳体，底部设集水探漏槽' },
+      { id: 'DEV_CCR05', name: 'CCR-05闭路恒温器', type: 'device', comm: 'comm_cryo', size: 10, desc: '无液氦低温恒温器，法兰橡胶O圈静密封，配外罩卡钳' },
+      { id: 'DEV_CCR09', name: 'CCR-09样品杆与恒温器', type: 'device', comm: 'comm_cryo', size: 10, desc: '多物理谱仪(MPI)高低温样品环境，配 DT-670 硅二极管' },
+      { id: 'DEV_LS336', name: 'LakeShore 336温控仪', type: 'device', comm: 'comm_cryo', size: 9, desc: '四通道高精度微机温控仪，具 Heater PID 闭环升温控制' },
+      { id: 'DEV_TARGET_BODY', name: '重水冷却钨靶体', type: 'device', comm: 'comm_target', size: 10, desc: '承受大功率质子束轰击，装配靶片热电偶 T01-T05' },
+      { id: 'DEV_REFLECTOR', name: '慢化器反射体组件', type: 'device', comm: 'comm_target', size: 9, desc: '布置测点 TC02/TC03/TC04，反映束流垂直偏离状态' },
+      { id: 'DEV_RTBT', name: '加速器RTBT传输线', type: 'device', comm: 'comm_target', size: 9, desc: '环到靶质子束流传输线，配备多丝靶与偏转校准磁铁' },
+      { id: 'DEV_CHOPPER_GPPD', name: '粉末谱仪T3D2斩波器', type: 'device', comm: 'comm_spec', size: 9, desc: '高速旋转中子斩波器，配前级机械泵与变频功率模块' },
+      { id: 'DEV_CHOPPER_VSANS', name: '微小角T1斩波器', type: 'device', comm: 'comm_spec', size: 9, desc: '耐压敏感旋转设备，前级真空度劣化易引发驱动跳闸' },
+      { id: 'DEV_SHUTTER5', name: '5号中子开关闸门', type: 'device', comm: 'comm_pps', size: 8.5, desc: '重型防辐射屏蔽闸门，配就地转盘驱动电机与限位' },
+      { id: 'DEV_GAS_BUS', name: '集中供气减压汇流排', type: 'device', comm: 'comm_pps', size: 8.5, desc: '双侧气源自动切换汇流排，控制氩/氦/氮主管网压力' },
+
+      // === 3. 异常事件 (Event / Fault) ===
+      { id: 'EVT_H2_SPIKE', name: '氢含量>4%高限报警', type: 'event', comm: 'comm_water', size: 9, desc: '色谱仪积分方法偏差或管路积氢，触碰 4% 防爆报警上限' },
+      { id: 'EVT_GC_FREEZE', name: '色谱仪工控机黑屏走平', type: 'event', comm: 'comm_water', size: 8.5, desc: '色谱工作站死机或采样滑阀卡死，导致氢监测曲线中断' },
+      { id: 'EVT_DRIVE_GAS_LOW', name: '色谱驱动气压力低限报警', type: 'event', comm: 'comm_water', size: 8, desc: '高纯氮气驱动气钢瓶耗尽或减压阀微开，滑阀无法换相' },
+      { id: 'EVT_HT_LEAK', name: '氦容器大漏水(音叉2s满)', type: 'event', comm: 'comm_water', size: 9.5, desc: '音叉探头 2 秒积满 400ml，重水主回路失压且触发 TPS' },
+      { id: 'EVT_VAC_STALL', name: 'CCR-05粗抽停滞70Pa', type: 'event', comm: 'comm_cryo', size: 9, desc: '换样机械泵抽真空超 15min 卡在 70Pa，判定为法兰微漏' },
+      { id: 'EVT_ORING_BULGE', name: '法兰O圈受压翘起变形', type: 'event', comm: 'comm_cryo', size: 8.5, desc: '充气拔杆气流过大或卡钳偏载拧过深，O 圈冲出密封槽' },
+      { id: 'EVT_SENSOR_OPEN', name: 'LakeShore Sensor Open', type: 'event', comm: 'comm_cryo', size: 9, desc: '测温传感器航插脱落断线，温控失去闭环，易全功率干烧' },
+      { id: 'EVT_TC02_SPIKE', name: '反射体TC02温度跃升65℃', type: 'event', comm: 'comm_target', size: 9, desc: '束流向上偏离打偏，同侧慢化器与反射体热负荷骤增' },
+      { id: 'EVT_CHOPPER_PHASE', name: '斩波器相差超差停机', type: 'event', comm: 'comm_spec', size: 8.5, desc: '真空泵故障导致腔体真空恶化，旋转阻力增加相位失步' },
+      { id: 'EVT_SHTR_SHORT', name: '5号闸门电机短路跳闸', type: 'event', comm: 'comm_pps', size: 8.5, desc: '闸门转盘电机相间短路，导致 24m 平台工艺 UPS 跳闸' },
+      { id: 'EVT_AR_SUPPLY_LOW', name: '氩气主管压力低限欠压', type: 'event', comm: 'comm_pps', size: 8, desc: '谱仪大用量实验抽空气源，切换气瓶时减压阀滞后' },
+
+      // === 4. 关键参数 (Parameter) ===
+      { id: 'PARAM_H2_LIMIT', name: '4.0% 氢气防爆报警上限', type: 'parameter', comm: 'comm_water', size: 8, desc: '重水保护气氢浓度刚性设防警戒线，超标必须排气' },
+      { id: 'PARAM_H2_RESET', name: '3.0% 排气安全恢复线', type: 'parameter', comm: 'comm_water', size: 7.5, desc: '执行手动排气后，氢气回落至此指标方可停止排气' },
+      { id: 'PARAM_DRIVE_PRS', name: '0.40 MPa 驱动氮气压力', type: 'parameter', comm: 'comm_water', size: 7.5, desc: '气相色谱仪采样气动滑阀可靠动作所需的最低工作压力' },
+      { id: 'PARAM_400ML', name: '400 ml 音叉集水容积', type: 'parameter', comm: 'comm_water', size: 7.5, desc: '氦容器底部集水槽标定容积，2s 满液代表重大漏水' },
+      { id: 'PARAM_50PA', name: '50 Pa 启分子泵绝对门槛', type: 'parameter', comm: 'comm_cryo', size: 8.5, desc: '严禁在 >50 Pa 时启动分子泵！防止反冲气流冲毁叶片' },
+      { id: 'PARAM_15MIN', name: '15 min 粗抽超时判定线', type: 'parameter', comm: 'comm_cryo', size: 7.5, desc: '抽真空超过 15 分钟仍未破 50 Pa，坚决判定为系统微漏' },
+      { id: 'PARAM_450K', name: '450 K 硅二极管耐温上限', type: 'parameter', comm: 'comm_cryo', size: 8, desc: 'DT-670 传感器极限物理耐温，超温必须拆卸固定安全区' },
+      { id: 'PARAM_30KPA', name: '30 kPa 低温充氦热交换压', type: 'parameter', comm: 'comm_cryo', size: 7.5, desc: '5-300K 低温变温测试时样品管充入高纯氦气的标称压力' },
+      { id: 'PARAM_TC02_65C', name: '65.0 ℃ 反射体超温阈值', type: 'parameter', comm: 'comm_target', size: 8, desc: 'TC02 温度触发中控报警并联动加速器调束的绝对边界' },
+      { id: 'PARAM_10PA', name: '10 Pa 斩波器腔体真空上限', type: 'parameter', comm: 'comm_spec', size: 7.5, desc: '斩波器变频电机维持正常转速与绝缘耐压所需的真空度' },
+
+      // === 5. 操作手册 / 处置规程 (Manual / SOP) ===
+      { id: 'MAN_H2_PURGE', name: '《重水保护气手动排气SOP》', type: 'manual', comm: 'comm_water', size: 9, desc: '现场手动调节排气阀泄压，通高纯氮气置换至 <3.0%' },
+      { id: 'MAN_GC_RESTART', name: '《色谱仪工控机冷重启规程》', type: 'manual', comm: 'comm_water', size: 8.5, desc: '主机安全断电 30s，重启操作系统，校正 TCD 电桥基线' },
+      { id: 'MAN_N2_REPLACE', name: '《色谱载气钢瓶更换操作卡》', type: 'manual', comm: 'comm_water', size: 8.5, desc: '关闭空瓶，接入高纯氮气满瓶，微调减压阀至 0.40 MPa' },
+      { id: 'MAN_HT_EMERGENCY', name: '《氦容器大漏水停水保压规程》', type: 'manual', comm: 'comm_water', size: 9.5, desc: '切束停泵，隔离靶体与反射体，排水分段保压，开出拖车' },
+      { id: 'MAN_CCR05_VACUUM', name: '《CCR-05换样抽真空排故规程》', type: 'manual', comm: 'comm_cryo', size: 9.5, desc: '★刚性禁止开分子泵；停泵保压；对称预紧卡钳消除偏载' },
+      { id: 'MAN_LS336_EMERGENCY', name: '《LakeShore 336紧急切断指引》', type: 'manual', comm: 'comm_cryo', size: 9, desc: '立即将 Loop 设置为 Heater Off，严禁盲打；排查航插' },
+      { id: 'MAN_DT670_PROTECT', name: '《450K以上温度计拆卸安全规程》', type: 'manual', comm: 'comm_cryo', size: 8.5, desc: '高温测试前卸下 DT-670 并撩起引线固定在冷指安全区' },
+      { id: 'MAN_RTBT_TUNE', name: '《RTBT束流对中调束协调指南》', type: 'manual', comm: 'comm_target', size: 9, desc: '通报加速器中控微调 RTBT 磁铁校正场，恢复打靶对称性' },
+      { id: 'MAN_CHOPPER_REPAIR', name: '《斩波器前级真空泵抢修SOP》', type: 'manual', comm: 'comm_spec', size: 9, desc: '更换备用前级真空泵，抽至 10Pa 内后消除驱动故障码' },
+      { id: 'MAN_SHTR_OVERHAUL', name: '《中子闸门短路隔离与检修规程》', type: 'manual', comm: 'comm_pps', size: 8.5, desc: '切换本地模式隔离故障闸门，恢复其余束线，停机换电机' },
+      { id: 'MAN_STOP_WORK_15M', name: '《夜班15分钟应急闭环红线》', type: 'manual', comm: 'comm_cryo', size: 9, desc: '遇机械卡滞或微漏严禁蛮干，拍照留痕，15min 内致电专家' }
+    ];
+
+    // Structured Causal Edges (With distinct relation labels shown on 3D lines)
+    const RAW_EDGES = [
+      // 1. Water System & Chromatography (水系统 ➔ 色谱仪 ➔ 异常 ➔ 参数 ➔ 手册)
+      { source: 'SYS_WATER', target: 'DEV_GC', label: '包含设备' },
+      { source: 'SYS_WATER', target: 'DEV_HWS_BOX', label: '包含设备' },
+      { source: 'SYS_WATER', target: 'DEV_HT_VESSEL', label: '包含设备' },
+      { source: 'DEV_HWS_BOX', target: 'DEV_GC', label: '采样气路' },
+      { source: 'DEV_GC', target: 'EVT_H2_SPIKE', label: '发生异常' },
+      { source: 'DEV_GC', target: 'EVT_GC_FREEZE', label: '发生异常' },
+      { source: 'DEV_GC', target: 'EVT_DRIVE_GAS_LOW', label: '发生异常' },
+      { source: 'EVT_H2_SPIKE', target: 'PARAM_H2_LIMIT', label: '触碰阈值' },
+      { source: 'PARAM_H2_LIMIT', target: 'MAN_H2_PURGE', label: '执行规程' },
+      { source: 'MAN_H2_PURGE', target: 'PARAM_H2_RESET', label: '恢复指标' },
+      { source: 'EVT_GC_FREEZE', target: 'MAN_GC_RESTART', label: '执行规程' },
+      { source: 'EVT_DRIVE_GAS_LOW', target: 'PARAM_DRIVE_PRS', label: '判定依据' },
+      { source: 'PARAM_DRIVE_PRS', target: 'MAN_N2_REPLACE', label: '执行规程' },
+      { source: 'DEV_HT_VESSEL', target: 'EVT_HT_LEAK', label: '发生异常' },
+      { source: 'EVT_HT_LEAK', target: 'PARAM_400ML', label: '标定容积' },
+      { source: 'PARAM_400ML', target: 'MAN_HT_EMERGENCY', label: '执行规程' },
+
+      // 2. Cryo-Vacuum System (低温系统 ➔ CCR-05 ➔ 异常 ➔ 参数 ➔ 手册)
+      { source: 'SYS_CRYO', target: 'DEV_CCR05', label: '包含设备' },
+      { source: 'SYS_CRYO', target: 'DEV_CCR09', label: '包含设备' },
+      { source: 'SYS_CRYO', target: 'DEV_LS336', label: '包含设备' },
+      { source: 'DEV_CCR05', target: 'DEV_LS336', label: '温控闭环' },
+      { source: 'DEV_CCR05', target: 'EVT_VAC_STALL', label: '发生异常' },
+      { source: 'DEV_CCR05', target: 'EVT_ORING_BULGE', label: '发生异常' },
+      { source: 'EVT_ORING_BULGE', target: 'EVT_VAC_STALL', label: '诱发微漏' },
+      { source: 'EVT_VAC_STALL', target: 'PARAM_15MIN', label: '判定超时' },
+      { source: 'EVT_VAC_STALL', target: 'PARAM_50PA', label: '违背门槛' },
+      { source: 'PARAM_50PA', target: 'MAN_CCR05_VACUUM', label: '执行规程' },
+      { source: 'MAN_CCR05_VACUUM', target: 'MAN_STOP_WORK_15M', label: '触发止损' },
+      { source: 'DEV_CCR05', target: 'PARAM_30KPA', label: '充氦参数' },
+      { source: 'DEV_LS336', target: 'EVT_SENSOR_OPEN', label: '发生异常' },
+      { source: 'EVT_SENSOR_OPEN', target: 'MAN_LS336_EMERGENCY', label: '执行规程' },
+      { source: 'DEV_CCR09', target: 'PARAM_450K', label: '耐温界限' },
+      { source: 'PARAM_450K', target: 'MAN_DT670_PROTECT', label: '执行规程' },
+
+      // 3. Target & Reflector & Beam (靶体系统 ➔ 反射体 ➔ 异常 ➔ 参数 ➔ 手册)
+      { source: 'SYS_TARGET', target: 'DEV_TARGET_BODY', label: '包含设备' },
+      { source: 'SYS_TARGET', target: 'DEV_REFLECTOR', label: '包含设备' },
+      { source: 'SYS_TARGET', target: 'DEV_RTBT', label: '打靶通道' },
+      { source: 'DEV_RTBT', target: 'DEV_REFLECTOR', label: '束流对中' },
+      { source: 'DEV_REFLECTOR', target: 'EVT_TC02_SPIKE', label: '发生异常' },
+      { source: 'EVT_TC02_SPIKE', target: 'PARAM_TC02_65C', label: '触碰阈值' },
+      { source: 'PARAM_TC02_65C', target: 'MAN_RTBT_TUNE', label: '执行规程' },
+
+      // 4. Spectrometer & Choppers (斩波器系统 ➔ T3D2/T1 ➔ 异常 ➔ 参数 ➔ 手册)
+      { source: 'SYS_CHOPPER', target: 'DEV_CHOPPER_GPPD', label: '包含设备' },
+      { source: 'SYS_CHOPPER', target: 'DEV_CHOPPER_VSANS', label: '包含设备' },
+      { source: 'DEV_CHOPPER_GPPD', target: 'EVT_CHOPPER_PHASE', label: '发生异常' },
+      { source: 'DEV_CHOPPER_VSANS', target: 'PARAM_10PA', label: '真空门槛' },
+      { source: 'PARAM_10PA', target: 'MAN_CHOPPER_REPAIR', label: '执行规程' },
+      { source: 'EVT_CHOPPER_PHASE', target: 'MAN_CHOPPER_REPAIR', label: '执行规程' },
+
+      // 5. Gas Supply & PPS Safety (供气与联锁 ➔ 闸门/汇流排 ➔ 异常 ➔ 参数 ➔ 手册)
+      { source: 'SYS_GAS', target: 'DEV_GAS_BUS', label: '包含设备' },
+      { source: 'DEV_GAS_BUS', target: 'EVT_AR_SUPPLY_LOW', label: '发生异常' },
+      { source: 'EVT_AR_SUPPLY_LOW', target: 'PARAM_DRIVE_PRS', label: '判定依据' },
+      { source: 'SYS_PPS', target: 'DEV_SHUTTER5', label: '包含设备' },
+      { source: 'DEV_SHUTTER5', target: 'EVT_SHTR_SHORT', label: '发生异常' },
+      { source: 'EVT_SHTR_SHORT', target: 'MAN_SHTR_OVERHAUL', label: '执行规程' }
+    ];
+
+    // --- 3. Three.js State & Architecture ---
+    let scene, camera, renderer, controls;
+    let container;
+    let nodeMeshGroup, edgeLineGroup, edgeLabelGroup, labelSpriteGroup, hullGroup, particleGroup, hitMeshGroup;
+    let targetReticleMesh;
+    let starFieldPoints;
+    let nodes3D = [];
+    let edges3D = [];
+    let nodeMap3D = new Map();
+    let hitMeshes = [];
+
+    // Interaction State
+    let raycaster, mouse;
+    let hoveredNode = null;
+    let selectedNode = null;
+    let highlightedPathNodeIds = new Set();
+    let highlightedPathEdgeKeys = new Set();
+    let autoRotate = false;
+    let particlesData = [];
+    let isPointerDown = false;
+    let pointerDownPos = { x: 0, y: 0, time: 0 };
+
+    // Filter toggles
+    let activeTypes = new Set(Object.keys(ENTITY_CONFIG));
+    let activeCommunities = new Set(Object.keys(COMMUNITY_CONFIG));
+    let showEdgeLabels = true;
+    let showHulls = true;
+    let showParticles = true;
+    let showLabels = true;
+
+    // Camera animation state
+    let isCamTweening = false;
+    let camTweenStartPos = new THREE.Vector3();
+    let camTweenEndPos = new THREE.Vector3();
+    let camTweenStartTarget = new THREE.Vector3();
+    let camTweenEndTarget = new THREE.Vector3();
+    let camTweenDuration = 850;
+    let camTweenStartTime = 0;
+
+    // Built-in Fallback Orbit Controls
+    class FallbackOrbitControls {
+      constructor(camera, domElement) {
+        this.camera = camera;
+        this.domElement = domElement || document.body;
+        this.target = new THREE.Vector3(0, 0, 0);
+        this.enableDamping = true;
+        this.dampingFactor = 0.08;
+        this.rotateSpeed = 0.75;
+        this.zoomSpeed = 1.2;
+        this.panSpeed = 0.8;
+        this.maxDistance = 1600;
+        this.minDistance = 60;
+        this.autoRotate = false;
+        this.autoRotateSpeed = 0.6;
+
+        const offset = new THREE.Vector3().subVectors(this.camera.position, this.target);
+        this.spherical = new THREE.Spherical().setFromVector3(offset);
+        this.sphericalDelta = new THREE.Spherical();
+        this.scale = 1;
+        this.panOffset = new THREE.Vector3();
+
+        this.isDragging = false;
+        this.isPanning = false;
+        this.prevMouse = { x: 0, y: 0 };
+
+        this.domElement.addEventListener('pointerdown', (e) => {
+          this.prevMouse = { x: e.clientX, y: e.clientY };
+          if (e.button === 0) this.isDragging = true;
+          else if (e.button === 2) this.isPanning = true;
+        });
+
+        window.addEventListener('pointermove', (e) => {
+          if (!this.isDragging && !this.isPanning) return;
+          const deltaX = e.clientX - this.prevMouse.x;
+          const deltaY = e.clientY - this.prevMouse.y;
+          this.prevMouse = { x: e.clientX, y: e.clientY };
+
+          if (this.isDragging) {
+            this.sphericalDelta.theta -= 2 * Math.PI * (deltaX / this.domElement.clientHeight) * this.rotateSpeed * 0.45;
+            this.sphericalDelta.phi -= 2 * Math.PI * (deltaY / this.domElement.clientHeight) * this.rotateSpeed * 0.45;
+          } else if (this.isPanning) {
+            const dist = this.camera.position.distanceTo(this.target);
+            const factor = dist * 0.001 * this.panSpeed;
+            const vLeft = new THREE.Vector3(-1, 0, 0).applyQuaternion(this.camera.quaternion);
+            const vUp = new THREE.Vector3(0, 1, 0).applyQuaternion(this.camera.quaternion);
+            this.panOffset.addScaledVector(vLeft, deltaX * factor);
+            this.panOffset.addScaledVector(vUp, -deltaY * factor);
+          }
+        });
+
+        window.addEventListener('pointerup', () => {
+          this.isDragging = false;
+          this.isPanning = false;
+        });
+
+        this.domElement.addEventListener('wheel', (e) => {
+          e.preventDefault();
+          if (e.deltaY < 0) this.scale /= (1 + 0.08 * this.zoomSpeed);
+          else if (e.deltaY > 0) this.scale *= (1 + 0.08 * this.zoomSpeed);
+        }, { passive: false });
+
+        this.domElement.addEventListener('contextmenu', (e) => e.preventDefault());
+      }
+
+      update() {
+        if (this.autoRotate) {
+          this.sphericalDelta.theta += (2 * Math.PI / 3600) * this.autoRotateSpeed;
+        }
+
+        this.target.add(this.panOffset);
+        this.panOffset.set(0, 0, 0);
+
+        const offset = new THREE.Vector3().subVectors(this.camera.position, this.target);
+        this.spherical.setFromVector3(offset);
+
+        this.spherical.theta += this.sphericalDelta.theta;
+        this.spherical.phi += this.sphericalDelta.phi;
+        this.spherical.phi = Math.max(0.01, Math.min(Math.PI - 0.01, this.spherical.phi));
+        this.spherical.radius *= this.scale;
+        this.spherical.radius = Math.max(this.minDistance, Math.min(this.maxDistance, this.spherical.radius));
+
+        if (this.enableDamping) {
+          this.sphericalDelta.theta *= (1 - this.dampingFactor);
+          this.sphericalDelta.phi *= (1 - this.dampingFactor);
+        } else {
+          this.sphericalDelta.set(0, 0, 0);
+        }
+        this.scale = 1;
+
+        offset.setFromSpherical(this.spherical);
+        this.camera.position.copy(this.target).add(offset);
+        this.camera.lookAt(this.target);
+      }
+    }
+
+    let lastTime = performance.now();
+    let frameCount = 0;
+
+    // --- 4. Initialize Three.js Scene ---
+    function initThree() {
+      container = document.getElementById('webgl-container');
+      // 重入保护：避免失败重试时重复追加 canvas
+      container.replaceChildren();
+      const width = container.clientWidth || 1;
+      const height = container.clientHeight || 1;
+
+      scene = new THREE.Scene();
+      scene.background = new THREE.Color(0x020617);
+      scene.fog = new THREE.FogExp2(0x020617, 0.0010);
+
+      camera = new THREE.PerspectiveCamera(50, width / height, 1, 3500);
+      camera.position.set(0, 160, 520);
+
+      renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false, powerPreference: 'high-performance' });
+      renderer.setSize(width, height);
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+      container.appendChild(renderer.domElement);
+
+      const OrbitControlsClass = (typeof THREE !== 'undefined' && THREE.OrbitControls) || window.OrbitControls || FallbackOrbitControls;
+      controls = new OrbitControlsClass(camera, renderer.domElement);
+      controls.enableDamping = true;
+      controls.dampingFactor = 0.08;
+      controls.rotateSpeed = 0.75;
+      controls.zoomSpeed = 1.1;
+      controls.panSpeed = 0.8;
+      controls.maxDistance = 1600;
+      controls.minDistance = 60;
+      controls.autoRotate = false;
+      controls.autoRotateSpeed = 0.6;
+
+      const ambientLight = new THREE.AmbientLight(0xffffff, 1.1);
+      scene.add(ambientLight);
+
+      const dirLight1 = new THREE.DirectionalLight(0x38bdf8, 1.4);
+      dirLight1.position.set(300, 400, 250);
+      scene.add(dirLight1);
+
+      const dirLight2 = new THREE.DirectionalLight(0xa855f7, 1.1);
+      dirLight2.position.set(-300, -200, -250);
+      scene.add(dirLight2);
+
+      nodeMeshGroup = new THREE.Group();
+      hitMeshGroup = new THREE.Group();
+      edgeLineGroup = new THREE.Group();
+      edgeLabelGroup = new THREE.Group();
+      labelSpriteGroup = new THREE.Group();
+      hullGroup = new THREE.Group();
+      particleGroup = new THREE.Group();
+
+      scene.add(hullGroup);
+      scene.add(edgeLineGroup);
+      scene.add(edgeLabelGroup);
+      scene.add(particleGroup);
+      scene.add(nodeMeshGroup);
+      scene.add(hitMeshGroup);
+      scene.add(labelSpriteGroup);
+
+      createTargetReticle();
+      createStarField();
+
+      raycaster = new THREE.Raycaster();
+      mouse = new THREE.Vector2();
+
+      buildGraph3D();
+
+      window.addEventListener('resize', onWindowResize);
+      renderer.domElement.addEventListener('pointermove', onPointerMove);
+      renderer.domElement.addEventListener('pointerdown', onPointerDown);
+      renderer.domElement.addEventListener('pointerup', onPointerUp);
+
+      updateHeaderStats();
+    }
+
+    function createTargetReticle() {
+      const group = new THREE.Group();
+      const ringGeom = new THREE.RingGeometry(18, 20, 32);
+      const ringMat = new THREE.MeshBasicMaterial({ color: 0x38bdf8, side: THREE.DoubleSide, transparent: true, opacity: 0.9 });
+      group.add(new THREE.Mesh(ringGeom, ringMat));
+
+      const bracketGeom = new THREE.RingGeometry(24, 27, 4, 1, 0, Math.PI / 4);
+      const bracketMat = new THREE.MeshBasicMaterial({ color: 0xf59e0b, side: THREE.DoubleSide, transparent: true, opacity: 0.95 });
+      for (let i = 0; i < 4; i++) {
+        const bMesh = new THREE.Mesh(bracketGeom, bracketMat);
+        bMesh.rotation.z = (Math.PI / 2) * i + Math.PI / 4;
+        group.add(bMesh);
+      }
+      group.visible = false;
+      targetReticleMesh = group;
+      scene.add(targetReticleMesh);
+    }
+
+    function createStarField() {
+      const starCount = 1800;
+      const geometry = new THREE.BufferGeometry();
+      const positions = new Float32Array(starCount * 3);
+      const colors = new Float32Array(starCount * 3);
+      const palette = [new THREE.Color(0x38bdf8), new THREE.Color(0xa855f7), new THREE.Color(0x10b981), new THREE.Color(0xf59e0b)];
+
+      for (let i = 0; i < starCount; i++) {
+        const i3 = i * 3;
+        const radius = 600 + Math.random() * 800;
+        const theta = Math.random() * Math.PI * 2;
+        const phi = Math.acos((Math.random() * 2) - 1);
+        positions[i3] = radius * Math.sin(phi) * Math.cos(theta);
+        positions[i3 + 1] = radius * Math.sin(phi) * Math.sin(theta);
+        positions[i3 + 2] = radius * Math.cos(phi);
+
+        const c = palette[Math.floor(Math.random() * palette.length)];
+        colors[i3] = c.r; colors[i3 + 1] = c.g; colors[i3 + 2] = c.b;
+      }
+      geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+      geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+
+      const material = new THREE.PointsMaterial({ size: 2.2, vertexColors: true, transparent: true, opacity: 0.7, fog: true });
+      starFieldPoints = new THREE.Points(geometry, material);
+      scene.add(starFieldPoints);
+    }
+
+    // --- 5. Build 3D Graph Nodes with Hierarchical 5-Tier Spatial Layout ---
+    function buildGraph3D() {
+      Object.keys(ENTITY_CONFIG).forEach(k => ENTITY_CONFIG[k].count = 0);
+      hitMeshes = [];
+
+      // Group nodes by community to order them neatly inside each sector
+      const commCounters = {};
+      Object.keys(COMMUNITY_CONFIG).forEach(k => commCounters[k] = {});
+
+      nodes3D = RAW_NODES.map((d) => {
+        ENTITY_CONFIG[d.type].count++;
+        const commCfg = COMMUNITY_CONFIG[d.comm];
+        const typeCfg = ENTITY_CONFIG[d.type];
+
+        if (!commCounters[d.comm][d.type]) commCounters[d.comm][d.type] = 0;
+        const indexInTier = commCounters[d.comm][d.type]++;
+
+        // Hierarchical Sector Layout:
+        // Angle corresponds to Subsystem Sector;
+        // Y coordinate strictly corresponds to Five-Tuple Layer (System ➔ Device ➔ Event ➔ Param ➔ Manual);
+        // Radius corresponds to depth spreading.
+        const baseAngle = commCfg.angle;
+        const angleSpread = (indexInTier - 1.0) * 0.16;
+        const finalAngle = baseAngle + angleSpread;
+
+        const radialDist = commCfg.radius + (indexInTier % 2 === 0 ? 12 : -12);
+        const x = radialDist * Math.cos(finalAngle);
+        const y = typeCfg.yOffset + (indexInTier * 4.5);
+        const z = radialDist * Math.sin(finalAngle);
+
+        // Core Sphere Mesh (Visual)
+        const geom = new THREE.SphereGeometry(d.size * 0.92, 24, 24);
+        const mat = new THREE.MeshStandardMaterial({
+          color: ENTITY_CONFIG[d.type].color,
+          roughness: 0.22,
+          metalness: 0.35,
+          emissive: ENTITY_CONFIG[d.type].color,
+          emissiveIntensity: 0.55
+        });
+
+        const mesh = new THREE.Mesh(geom, mat);
+        mesh.position.set(x, y, z);
+        mesh.userData = { id: d.id, nodeData: d, isNodeMesh: true };
+
+        // Outer Glow Sphere
+        const glowGeom = new THREE.SphereGeometry(d.size * 1.35, 16, 16);
+        const glowMat = new THREE.MeshBasicMaterial({
+          color: ENTITY_CONFIG[d.type].color,
+          transparent: true,
+          opacity: 0.20,
+          wireframe: true
+        });
+        const glowMesh = new THREE.Mesh(glowGeom, glowMat);
+        mesh.add(glowMesh);
+        nodeMeshGroup.add(mesh);
+
+        // Transparent Hit Proxy Sphere
+        const hitRadius = Math.max(d.size * 2.8, 30);
+        const hitGeom = new THREE.SphereGeometry(hitRadius, 16, 16);
+        const hitMat = new THREE.MeshBasicMaterial({
+          transparent: true,
+          opacity: 0.0001,
+          depthWrite: false
+        });
+        const hitMesh = new THREE.Mesh(hitGeom, hitMat);
+        hitMesh.position.set(x, y, z);
+        hitMesh.userData = { id: d.id, nodeData: d, isHitProxy: true };
+        hitMeshGroup.add(hitMesh);
+        hitMeshes.push(hitMesh);
+
+        // 3D Billboard Label Sprite
+        const sprite = createTextSprite(d.name, ENTITY_CONFIG[d.type].hex);
+        sprite.position.set(x, y + d.size + 9, z);
+        sprite.userData = { id: d.id, nodeData: d, isSprite: true };
+        labelSpriteGroup.add(sprite);
+
+        return {
+          ...d,
+          x, y, z,
+          mesh,
+          glowMesh,
+          hitMesh,
+          sprite,
+          degree: 0,
+          neighbors: new Set(),
+          edges: []
+        };
+      });
+
+      nodeMap3D = new Map(nodes3D.map(n => [n.id, n]));
+
+      // 2. High-Visibility Edges & 3D Relation Label Sprites
+      edges3D = RAW_EDGES.map(e => {
+        const src = nodeMap3D.get(e.source);
+        const tgt = nodeMap3D.get(e.target);
+        if (src && tgt) {
+          src.degree++;
+          tgt.degree++;
+          src.neighbors.add(tgt.id);
+          tgt.neighbors.add(src.id);
+
+          const lineGeom = new THREE.BufferGeometry().setFromPoints([
+            new THREE.Vector3(src.x, src.y, src.z),
+            new THREE.Vector3(tgt.x, tgt.y, tgt.z)
+          ]);
+
+          // Bright neon cyan/purple line material instead of dark line
+          const isCrossComm = src.comm !== tgt.comm;
+          const lineColor = isCrossComm ? 0xc084fc : 0x38bdf8;
+
+          const lineMat = new THREE.LineBasicMaterial({
+            color: lineColor,
+            transparent: true,
+            opacity: 0.75,
+            linewidth: 1
+          });
+
+          const line = new THREE.Line(lineGeom, lineMat);
+          edgeLineGroup.add(line);
+
+          // 3D Floating Relation Label Sprite on the midpoint of the line
+          const midX = (src.x + tgt.x) * 0.5;
+          const midY = (src.y + tgt.y) * 0.5;
+          const midZ = (src.z + tgt.z) * 0.5;
+
+          const edgeLabelSprite = createEdgeLabelSprite(e.label);
+          edgeLabelSprite.position.set(midX, midY, midZ);
+          edgeLabelGroup.add(edgeLabelSprite);
+
+          const edgeObj = {
+            source: src,
+            target: tgt,
+            label: e.label,
+            key: `${src.id}->${tgt.id}`,
+            line,
+            lineMat,
+            labelSprite: edgeLabelSprite
+          };
+
+          src.edges.push(edgeObj);
+          tgt.edges.push(edgeObj);
+
+          particlesData.push({
+            edge: edgeObj,
+            t: Math.random(),
+            speed: 0.007 + Math.random() * 0.006
+          });
+
+          return edgeObj;
+        }
+        return null;
+      }).filter(Boolean);
+
+      buildLaserParticleMesh();
+      buildSubsystemFloorDiscs();
+      populateQuickSearchDropdown();
+    }
+
+    // Helper: Create 3D Edge Relation Label Sprite
+    function createEdgeLabelSprite(text) {
+      const canvas = document.createElement('canvas');
+      canvas.width = 256;
+      canvas.height = 64;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return new THREE.Sprite(new THREE.SpriteMaterial({ transparent: true, opacity: 0, depthWrite: false }));
+
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      // Rounded Capsule Background
+      ctx.fillStyle = 'rgba(11, 19, 41, 0.88)';
+      ctx.strokeStyle = '#38bdf8';
+      ctx.lineWidth = 2.5;
+
+      const r = 14;
+      ctx.beginPath();
+      ctx.moveTo(r, 2);
+      ctx.lineTo(256 - r, 2);
+      ctx.quadraticCurveTo(256, 2, 256, r);
+      ctx.lineTo(256, 64 - r);
+      ctx.quadraticCurveTo(256, 64, 256 - r, 64);
+      ctx.lineTo(r, 64);
+      ctx.quadraticCurveTo(0, 64, 0, 64 - r);
+      ctx.lineTo(0, r);
+      ctx.quadraticCurveTo(0, 2, r, 2);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+
+      ctx.font = 'bold 26px "Inter", "Microsoft YaHei", sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillStyle = '#e0f2fe';
+      ctx.fillText(text, 128, 33);
+
+      const texture = new THREE.CanvasTexture(canvas);
+      texture.minFilter = THREE.LinearFilter;
+      const material = new THREE.SpriteMaterial({ map: texture, transparent: true, depthWrite: false });
+      const sprite = new THREE.Sprite(material);
+      sprite.scale.set(22, 5.5, 1);
+      return sprite;
+    }
+
+    function createTextSprite(text, colorHex) {
+      const canvas = document.createElement('canvas');
+      canvas.width = 440;
+      canvas.height = 110;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return new THREE.Sprite(new THREE.SpriteMaterial({ transparent: true, opacity: 0, depthWrite: false }));
+
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.font = 'bold 36px "Inter", sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+
+      ctx.shadowColor = colorHex;
+      ctx.shadowBlur = 14;
+      ctx.fillStyle = '#ffffff';
+      ctx.fillText(text, canvas.width / 2, canvas.height / 2);
+
+      const texture = new THREE.CanvasTexture(canvas);
+      texture.minFilter = THREE.LinearFilter;
+      const material = new THREE.SpriteMaterial({ map: texture, transparent: true, depthWrite: false });
+      const sprite = new THREE.Sprite(material);
+      sprite.scale.set(44, 11, 1);
+      return sprite;
+    }
+
+    let laserParticleCloud;
+    function buildLaserParticleMesh() {
+      const pCount = particlesData.length;
+      const geom = new THREE.BufferGeometry();
+      const pos = new Float32Array(pCount * 3);
+      geom.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+
+      const mat = new THREE.PointsMaterial({
+        color: 0x38bdf8,
+        size: 6.5,
+        transparent: true,
+        opacity: 0.95,
+        blending: THREE.AdditiveBlending
+      });
+
+      laserParticleCloud = new THREE.Points(geom, mat);
+      particleGroup.add(laserParticleCloud);
+    }
+
+    // Clean Subsystem Floor Discs instead of confusing rotating cages
+    let subsystemDiscMeshes = [];
+    function buildSubsystemFloorDiscs() {
+      subsystemDiscMeshes.forEach(m => hullGroup.remove(m));
+      subsystemDiscMeshes = [];
+
+      for (const [commKey, cfg] of Object.entries(COMMUNITY_CONFIG)) {
+        const members = nodes3D.filter(n => n.comm === commKey);
+        if (members.length < 2) continue;
+
+        const center = new THREE.Vector3();
+        members.forEach(m => center.add(new THREE.Vector3(m.x, 0, m.z)));
+        center.divideScalar(members.length);
+
+        // Ground Glowing Base Ring
+        const ringGeom = new THREE.RingGeometry(45, 90, 48);
+        const ringMat = new THREE.MeshBasicMaterial({
+          color: cfg.color,
+          transparent: true,
+          opacity: 0.12,
+          side: THREE.DoubleSide
+        });
+        const disc = new THREE.Mesh(ringGeom, ringMat);
+        disc.rotation.x = Math.PI / 2;
+        disc.position.set(center.x, -165, center.z);
+
+        // Sector Title Billboard
+        const titleSprite = createTextSprite(cfg.name, cfg.hex);
+        titleSprite.position.set(center.x, -170, center.z);
+        titleSprite.scale.set(65, 16, 1);
+
+        hullGroup.add(disc);
+        hullGroup.add(titleSprite);
+        subsystemDiscMeshes.push(disc, titleSprite);
+      }
+    }
+
+    function updateLaserParticles() {
+      if (!showParticles || !laserParticleCloud) return;
+
+      const posAttr = laserParticleCloud.geometry.attributes.position;
+      const visibleSet = new Set(nodes3D.filter(n => activeTypes.has(n.type) && activeCommunities.has(n.comm)).map(n => n.id));
+
+      for (let i = 0; i < particlesData.length; i++) {
+        const p = particlesData[i];
+        if (!visibleSet.has(p.edge.source.id) || !visibleSet.has(p.edge.target.id)) {
+          posAttr.setXYZ(i, 0, -9999, 0);
+          continue;
+        }
+
+        p.t = (p.t + p.speed) % 1.0;
+        const src = p.edge.source;
+        const tgt = p.edge.target;
+
+        const px = THREE.MathUtils.lerp(src.x, tgt.x, p.t);
+        const py = THREE.MathUtils.lerp(src.y, tgt.y, p.t);
+        const pz = THREE.MathUtils.lerp(src.z, tgt.z, p.t);
+
+        posAttr.setXYZ(i, px, py, pz);
+      }
+      posAttr.needsUpdate = true;
+    }
+
+    // --- 6. Smooth Camera Fly-To Tweening ---
+    function flyTo(targetPosition, lookPosition, duration = 850) {
+      camTweenStartPos.copy(camera.position);
+      camTweenEndPos.copy(targetPosition);
+      camTweenStartTarget.copy(controls.target);
+      camTweenEndTarget.copy(lookPosition);
+
+      camTweenStartTime = performance.now();
+      camTweenDuration = duration;
+      isCamTweening = true;
+    }
+
+    function updateCameraTween() {
+      if (!isCamTweening) return;
+
+      const elapsed = performance.now() - camTweenStartTime;
+      const progress = Math.min(elapsed / camTweenDuration, 1.0);
+      const t = 1 - Math.pow(1 - progress, 3);
+
+      camera.position.lerpVectors(camTweenStartPos, camTweenEndPos, t);
+      controls.target.lerpVectors(camTweenStartTarget, camTweenEndTarget, t);
+
+      if (progress >= 1.0) {
+        camera.position.copy(camTweenEndPos);
+        controls.target.copy(camTweenEndTarget);
+        isCamTweening = false;
+      }
+    }
+
+    // --- 7. Helper: Get All Active Clickable Objects ---
+    function getClickableObjects() {
+      const candidates = [];
+      nodes3D.forEach(n => {
+        if (activeTypes.has(n.type) && activeCommunities.has(n.comm)) {
+          candidates.push(n.hitMesh);
+          candidates.push(n.mesh);
+          if (showLabels) candidates.push(n.sprite);
+        }
+      });
+      return candidates;
+    }
+
+    function findNodeFromIntersect(intersect) {
+      if (!intersect || !intersect.object) return null;
+      let obj = intersect.object;
+      while (obj) {
+        if (obj.userData && obj.userData.nodeData) {
+          return obj.userData.nodeData;
+        }
+        obj = obj.parent;
+      }
+      return null;
+    }
+
+    // --- 8. Pointer Events: Hover and Click Detection ---
+    function onPointerMove(e) {
+      const rect = renderer.domElement.getBoundingClientRect();
+      mouse.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+      mouse.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+
+      raycaster.setFromCamera(mouse, camera);
+      const candidates = getClickableObjects();
+      const intersects = raycaster.intersectObjects(candidates, true);
+
+      let foundNode = null;
+      if (intersects.length > 0) {
+        foundNode = findNodeFromIntersect(intersects[0]);
+      }
+
+      const tooltip = document.getElementById('hover-tooltip');
+
+      if (foundNode) {
+        if (hoveredNode !== foundNode) {
+          hoveredNode = foundNode;
+          renderer.domElement.style.cursor = 'pointer';
+          updateVisualState();
+        }
+        tooltip.style.left = `${e.clientX + 14}px`;
+        tooltip.style.top = `${e.clientY + 14}px`;
+        const cfg = ENTITY_CONFIG[foundNode.type];
+        const badge = document.getElementById('tooltip-type');
+        badge.innerText = cfg.label.split(' ')[0];
+        badge.style.background = `${cfg.hex}30`;
+        badge.style.color = cfg.hex;
+        document.getElementById('tooltip-title').innerText = foundNode.name;
+        document.getElementById('tooltip-desc').innerText = foundNode.desc.substring(0, 38) + '...';
+        tooltip.classList.remove('hidden');
+      } else {
+        if (hoveredNode !== null) {
+          hoveredNode = null;
+          renderer.domElement.style.cursor = 'default';
+          updateVisualState();
+        }
+        tooltip.classList.add('hidden');
+      }
+    }
+
+    function onPointerDown(e) {
+      if (e.button !== 0) return;
+      isPointerDown = true;
+      pointerDownPos = { x: e.clientX, y: e.clientY, time: performance.now() };
+    }
+
+    function onPointerUp(e) {
+      if (e.button !== 0) return;
+      if (!isPointerDown) return;
+      isPointerDown = false;
+
+      const dist = Math.hypot(e.clientX - pointerDownPos.x, e.clientY - pointerDownPos.y);
+      const elapsed = performance.now() - pointerDownPos.time;
+
+      if (dist <= 12 && elapsed <= 650) {
+        const rect = renderer.domElement.getBoundingClientRect();
+        mouse.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+        mouse.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+
+        raycaster.setFromCamera(mouse, camera);
+        const candidates = getClickableObjects();
+        const intersects = raycaster.intersectObjects(candidates, true);
+
+        if (intersects.length > 0) {
+          const targetNode = findNodeFromIntersect(intersects[0]);
+          if (targetNode) {
+            selectNode3D(targetNode);
+            return;
+          }
+        }
+        clearSelectedNode();
+      }
+    }
+
+    // --- 9. Node Selection, Detail Display & Viewport HUD ---
+    function selectNode3D(node) {
+      selectedNode = node;
+      document.getElementById('lbl-focus-target').innerText = node.name;
+
+      // Bottom Callout Pill
+      const pill = document.getElementById('active-entity-pill');
+      pill.classList.remove('hidden');
+      document.getElementById('pill-entity-name').innerText = node.name;
+
+      // 3D Targeting Reticle
+      targetReticleMesh.visible = true;
+      targetReticleMesh.position.set(node.x, node.y, node.z);
+
+      // Smooth Camera Teleport
+      const targetVec = new THREE.Vector3(node.x, node.y, node.z);
+      const camOffset = targetVec.clone().add(new THREE.Vector3(0, 25, 105));
+      flyTo(camOffset, targetVec);
+
+      // Update 3D Styles
+      updateVisualState();
+
+      // Show in-canvas Floating HUD Card
+      renderCanvasHUDCard(node);
+
+      // Render Right Inspector Drawer and switch tab
+      renderInspector(node);
+      switchGraphRagDrawerTab('inspector');
+    }
+
+    function clearSelectedNode() {
+      if (!selectedNode) return;
+      selectedNode = null;
+      document.getElementById('lbl-focus-target').innerText = '全域阶梯星云';
+      document.getElementById('active-entity-pill').classList.add('hidden');
+      document.getElementById('canvas-node-card').classList.add('hidden');
+      targetReticleMesh.visible = false;
+      updateVisualState();
+    }
+
+    // Render Canvas Top-Right Quick Card
+    function renderCanvasHUDCard(node) {
+      const card = document.getElementById('canvas-node-card');
+      const cfg = ENTITY_CONFIG[node.type];
+      const comm = COMMUNITY_CONFIG[node.comm];
+
+      const badge = document.getElementById('canvas-card-badge');
+      badge.innerText = cfg.label.split(' ')[0];
+      badge.style.background = cfg.hex;
+      badge.style.color = '#020617';
+
+      document.getElementById('canvas-card-comm').innerText = comm.name.split(':')[0];
+      document.getElementById('canvas-card-title').innerText = node.name;
+      document.getElementById('canvas-card-desc').innerText = node.desc;
+      document.getElementById('canvas-card-degree').innerText = `${node.degree} 条直接因果链`;
+
+      // Build chain preview
+      let chainText = `[${cfg.label.split(' ')[0]}] ${node.name}`;
+      if (node.edges.length > 0) {
+        const firstEdge = node.edges[0];
+        const other = firstEdge.source.id === node.id ? firstEdge.target : firstEdge.source;
+        chainText += ` ──[${firstEdge.label}]──► [${ENTITY_CONFIG[other.type].label.split(' ')[0]}] ${other.name}`;
+      }
+      document.getElementById('canvas-card-chain').innerText = chainText;
+
+      card.classList.remove('hidden');
+    }
+
+    document.getElementById('canvas-card-close').addEventListener('click', () => {
+      document.getElementById('canvas-node-card').classList.add('hidden');
+    });
+
+    document.getElementById('canvas-card-focus-btn').addEventListener('click', () => {
+      if (selectedNode) {
+        const targetVec = new THREE.Vector3(selectedNode.x, selectedNode.y, selectedNode.z);
+        flyTo(targetVec.clone().add(new THREE.Vector3(0, 20, 90)), targetVec);
+      }
+    });
+
+    document.getElementById('canvas-card-full-btn').addEventListener('click', () => {
+      switchGraphRagDrawerTab('inspector');
+      const insContent = document.getElementById('inspector-content');
+      insContent.classList.add('flash-box');
+      setTimeout(() => insContent.classList.remove('flash-box'), 1200);
+    });
+
+    // --- 10. Visual State Coordinator ---
+    function updateVisualState() {
+      const visibleSet = new Set(nodes3D.filter(n => activeTypes.has(n.type) && activeCommunities.has(n.comm)).map(n => n.id));
+
+      nodes3D.forEach(n => {
+        const isVisible = visibleSet.has(n.id);
+        n.mesh.visible = isVisible;
+        n.hitMesh.visible = isVisible;
+        n.sprite.visible = isVisible && showLabels;
+
+        if (!isVisible) return;
+
+        const isHovered = hoveredNode && hoveredNode.id === n.id;
+        const isSelected = selectedNode && selectedNode.id === n.id;
+        const isNeighbor = (hoveredNode && hoveredNode.neighbors.has(n.id)) || (selectedNode && selectedNode.neighbors.has(n.id));
+        const isPath = highlightedPathNodeIds.has(n.id);
+
+        if (isSelected || isPath) {
+          n.mesh.material.emissiveIntensity = 0.95;
+          n.mesh.material.color.setHex(0xffffff);
+          n.glowMesh.visible = true;
+          n.glowMesh.material.opacity = 0.65;
+          n.glowMesh.scale.set(1.65, 1.65, 1.65);
+        } else if (isHovered || isNeighbor) {
+          n.mesh.material.emissiveIntensity = 0.85;
+          n.mesh.material.color.setHex(ENTITY_CONFIG[n.type].color);
+          n.glowMesh.visible = true;
+          n.glowMesh.material.opacity = 0.40;
+          n.glowMesh.scale.set(1.4, 1.4, 1.4);
+        } else if (highlightedPathNodeIds.size > 0 || selectedNode) {
+          n.mesh.material.emissiveIntensity = 0.18;
+          n.mesh.material.color.setHex(ENTITY_CONFIG[n.type].color);
+          n.glowMesh.visible = false;
+        } else {
+          n.mesh.material.emissiveIntensity = 0.55;
+          n.mesh.material.color.setHex(ENTITY_CONFIG[n.type].color);
+          n.glowMesh.visible = true;
+          n.glowMesh.material.opacity = 0.18;
+          n.glowMesh.scale.set(1.28, 1.28, 1.28);
+        }
+      });
+
+      edges3D.forEach(e => {
+        const isVisible = visibleSet.has(e.source.id) && visibleSet.has(e.target.id);
+        e.line.visible = isVisible;
+        if (e.labelSprite) e.labelSprite.visible = isVisible && showEdgeLabels;
+
+        if (!isVisible) return;
+
+        const isPath = highlightedPathEdgeKeys.has(e.key) || highlightedPathEdgeKeys.has(`${e.target.id}->${e.source.id}`);
+        const isActive = (selectedNode && (e.source.id === selectedNode.id || e.target.id === selectedNode.id)) ||
+                         (hoveredNode && (e.source.id === hoveredNode.id || e.target.id === hoveredNode.id));
+
+        if (isPath) {
+          e.lineMat.color.setHex(0x38bdf8);
+          e.lineMat.opacity = 1.0;
+          if (e.labelSprite) e.labelSprite.scale.set(28, 7, 1);
+        } else if (isActive) {
+          e.lineMat.color.setHex(0xffffff);
+          e.lineMat.opacity = 0.95;
+          if (e.labelSprite) e.labelSprite.scale.set(26, 6.5, 1);
+        } else if (highlightedPathNodeIds.size > 0 || selectedNode) {
+          e.lineMat.color.setHex(0x1e293b);
+          e.lineMat.opacity = 0.12;
+          if (e.labelSprite) e.labelSprite.visible = false;
+        } else {
+          e.lineMat.color.setHex(e.source.comm !== e.target.comm ? 0xc084fc : 0x38bdf8);
+          e.lineMat.opacity = 0.70;
+          if (e.labelSprite) {
+            e.labelSprite.scale.set(22, 5.5, 1);
+            e.labelSprite.visible = showEdgeLabels;
+          }
+        }
+      });
+    }
+
+    // --- 11. Quick Search & Dropdown Picker ---
+    function populateQuickSearchDropdown() {
+      const input = document.getElementById('quick-entity-search');
+      const dropdown = document.getElementById('quick-search-dropdown');
+
+      input.addEventListener('input', (e) => {
+        const val = e.target.value.trim().toLowerCase();
+        if (!val) {
+          dropdown.classList.add('hidden');
+          return;
+        }
+
+        const matches = nodes3D.filter(n => n.name.toLowerCase().includes(val) || n.id.toLowerCase().includes(val) || n.desc.toLowerCase().includes(val)).slice(0, 8);
+        if (matches.length === 0) {
+          dropdown.innerHTML = '<div class="px-3 py-2 text-xs text-slate-500">未找到匹配的五元组实体</div>';
+        } else {
+          dropdown.innerHTML = matches.map(m => `
+            <div class="px-3 py-2 hover:bg-cyan-950/80 cursor-pointer flex items-center justify-between text-xs transition border-b border-slate-800/50" onclick="window.selectFromSearch('${m.id}')">
+              <div>
+                <span class="font-medium text-slate-200 block">${m.name}</span>
+                <span class="text-[10px] text-slate-400 block">${m.desc.substring(0, 24)}...</span>
+              </div>
+              <span class="text-[10px] mono px-1.5 py-0.5 rounded font-semibold ml-2" style="background:${ENTITY_CONFIG[m.type].hex}25; color:${ENTITY_CONFIG[m.type].hex}">
+                ${ENTITY_CONFIG[m.type].label.split(' ')[0]}
+              </span>
+            </div>
+          `).join('');
+        }
+        dropdown.classList.remove('hidden');
+      });
+
+      document.addEventListener('click', (e) => {
+        if (!input.contains(e.target) && !dropdown.contains(e.target)) {
+          dropdown.classList.add('hidden');
+        }
+      });
+    }
+
+    window.selectFromSearch = function(nodeId) {
+      document.getElementById('quick-search-dropdown').classList.add('hidden');
+      document.getElementById('quick-entity-search').value = '';
+      const node = nodeMap3D.get(nodeId);
+      if (node) {
+        selectNode3D(node);
+      }
+    };
+
+    window.filterByTypeQuick = function(type) {
+      activeTypes = new Set([type]);
+      document.querySelectorAll('#entity-filter-list input').forEach(input => {
+        input.checked = input.getAttribute('data-type') === type;
+      });
+      updateVisualState();
+    };
+
+    // --- 12. Five-Tuple GraphRAG Incident Reasoning Scenarios ---
+    const RAG_SCENARIOS = {
+      gc_h2: {
+        title: '水系统色谱仪：重水保护气氢浓度超标 (>4%) 处置因果',
+        isRedline: false,
+        path: ['SYS_WATER', 'DEV_GC', 'EVT_H2_SPIKE', 'PARAM_H2_LIMIT', 'MAN_H2_PURGE', 'PARAM_H2_RESET'],
+        content: `
+          <div class="space-y-2 text-xs">
+            <div class="p-2.5 bg-emerald-950/40 border border-emerald-800/80 rounded-lg text-emerald-200">
+              <strong>五阶因果链：</strong>公用水冷系统 ──[包含设备]──► 重水气相色谱仪 ──[发生异常]──► 氢含量>4%报警 ──[触碰阈值]──► 4.0%防爆上限 ──[执行规程]──► 《重水保护气手动排气SOP》
+            </div>
+            <p><strong>异常成因：</strong>色谱仪积分方法偏差或回路正常辐照分解产氢，导致浓度越过 4.0% 警戒线。</p>
+            <p><strong>闭环处置：</strong>依据《重水保护气手动排气SOP》现场开启手动排气阀泄压，通高纯氮气吹扫置换，直至氢气浓度降至 <strong>3.0% 安全恢复线</strong> 以下，消警恢复正常。</p>
+          </div>
+        `,
+        source: '《重水系统运行手册》第 4.2 节 & 2023-2024 水冷运维台账'
+      },
+      ccr_vac: {
+        title: '低温系统CCR-05：粗抽停滞70Pa能否开分子泵？',
+        isRedline: true,
+        redlineText: '严禁启动分子泵！粗抽真空度必须达到 < 50 Pa 方允许开启分子泵。当前 70 Pa 持续 15 min 判定为法兰微漏，强启将导致分子泵叶片遭受反冲气流冲击损毁！',
+        path: ['SYS_CRYO', 'DEV_CCR05', 'EVT_ORING_BULGE', 'EVT_VAC_STALL', 'PARAM_15MIN', 'PARAM_50PA', 'MAN_CCR05_VACUUM', 'MAN_STOP_WORK_15M'],
+        content: `
+          <div class="space-y-2 text-xs">
+            <div class="p-2.5 bg-rose-950/40 border border-rose-800/80 rounded-lg text-rose-200">
+              <strong>五阶因果链：</strong>低温样品系统 ──[包含设备]──► CCR-05 ──[诱发微漏]──► 粗抽停滞70Pa ──[违背门槛]──► 50Pa启泵红线 ──[执行规程]──► 《CCR-05换样抽真空排故规程》
+            </div>
+            <p><strong>刚性安全禁令：</strong>抽气超过 15 min 未破 50 Pa 坚决判定为系统微漏。严禁强开分子泵！</p>
+            <p><strong>标准处置动作：</strong>1. 立即停止机械泵保压；2. 重新对角对称预紧外罩卡钳消除 O 圈受压偏载；3. 若 15min 仍超标启动 15 分钟专家求助闭环。</p>
+          </div>
+        `,
+        source: '《CCR-05换样操作手册》第 3.2 节'
+      },
+      ls336_sensor: {
+        title: '低温系统LakeShore 336：Sensor Open 通道开路处置',
+        isRedline: true,
+        redlineText: '严禁强行升温！必须立即切换为 Heater Off，防范控温回路失去负反馈闭环盲打干烧破坏冷指！',
+        path: ['SYS_CRYO', 'DEV_LS336', 'EVT_SENSOR_OPEN', 'MAN_LS336_EMERGENCY', 'DEV_CCR05'],
+        content: `
+          <div class="space-y-2 text-xs">
+            <div class="p-2.5 bg-amber-950/40 border border-amber-800/80 rounded-lg text-amber-200">
+              <strong>五阶因果链：</strong>低温样品系统 ──[包含设备]──► LakeShore 336 ──[发生异常]──► Sensor Open开路 ──[执行规程]──► 《LakeShore 336紧急切断指引》
+            </div>
+            <p><strong>处置规范：</strong>立即将 Loop 切换为 Heater Off，切断加热回路；排查机柜后方航空插头及引线通断；若换新样品杆需在 Input Setup 重新载入匹配曲线（如 02 DT-670）。</p>
+          </div>
+        `,
+        source: '《LakeShore 336 温控操作指引》'
+      },
+      beam_tilt: {
+        title: '靶体系统反射体：TC02温度跃升65℃与束流打偏因果链',
+        isRedline: false,
+        path: ['SYS_TARGET', 'DEV_TARGET_BODY', 'DEV_REFLECTOR', 'DEV_RTBT', 'EVT_TC02_SPIKE', 'PARAM_TC02_65C', 'MAN_RTBT_TUNE'],
+        content: `
+          <div class="space-y-2 text-xs">
+            <div class="p-2.5 bg-purple-950/40 border border-purple-800/80 rounded-lg text-purple-200">
+              <strong>五阶因果链：</strong>靶体慢化系统 ──[束流对中]──► 反射体组件 ──[发生异常]──► TC02升至65℃ ──[触碰阈值]──► 65.0℃超温限值 ──[执行规程]──► 《RTBT束流对中调束指南》
+            </div>
+            <p><strong>演化本质：</strong>RTBT 传输线校正场漂移导致质子束向上打偏，钨靶吸收热量减少而同侧反射体热负荷骤增导致 TC02 突变报警。</p>
+            <p><strong>协同对策：</strong>联系加速器中控微调 RTBT 磁铁校正场，重新使打靶中心对齐，温度自愈回落。</p>
+          </div>
+        `,
+        source: '《反射体温度TC02变化分析报告》'
+      },
+      ht_leak: {
+        title: '靶站氦容器：音叉液位计2秒积满400ml大泄漏紧急响应',
+        isRedline: true,
+        redlineText: '音叉液位计 2 秒积满 400ml，表明氦容器内部发生重水大泄漏！严禁继续供束，立即触发水冷紧急停机！',
+        path: ['SYS_WATER', 'DEV_HT_VESSEL', 'EVT_HT_LEAK', 'PARAM_400ML', 'MAN_HT_EMERGENCY', 'DEV_HWS_BOX'],
+        content: `
+          <div class="space-y-2 text-xs">
+            <p><strong>故障性质：</strong>氦容器内部重水主冷却管路突发大破裂，触发 TPS 靶保护联锁切断加速器束流。</p>
+            <p><strong>处置规范：</strong>停泵保压，分段开展反射体与靶体气压检测，将水排入衰变贮存罐，靶体拖车开出氦容器抢修。</p>
+          </div>
+        `,
+        source: '《氦容器漏水抢修记录》20220625'
+      },
+      global_h2: {
+        title: 'GraphRAG 全局报告：全生命周期色谱异常与氢浓度虚警演进',
+        isRedline: false,
+        path: ['SYS_WATER', 'DEV_GC', 'EVT_H2_SPIKE', 'EVT_GC_FREEZE', 'EVT_DRIVE_GAS_LOW', 'MAN_H2_PURGE', 'MAN_GC_RESTART', 'MAN_N2_REPLACE'],
+        content: `
+          <div class="space-y-2 text-xs">
+            <div class="p-2 bg-purple-950/40 border border-purple-800/80 rounded text-purple-200">
+              <strong>Leiden 层次化社区摘要聚合：</strong>对 2022-2026 年度 47 起色谱与水冷事件执行 Map-Reduce 提炼。
+            </div>
+            <p><strong>1. 共性诱因：</strong>数据分析算法偏差与基线漂移占 65%，工控机黑屏死机占 20%，驱动氮气瓶耗尽占 15%。</p>
+            <p><strong>2. 改进闭环：</strong>全面普及色谱仪冷重启SOP，气瓶间增设欠压提前预警与定期排气机制。</p>
+          </div>
+        `,
+        source: 'GraphRAG 离线构建产物：Community Report #Global-H2-Summary'
+      }
+    };
+
+    function triggerScenario(scenarioKey) {
+      const scenario = RAG_SCENARIOS[scenarioKey];
+      if (!scenario) return;
+
+      highlightedPathNodeIds.clear();
+      highlightedPathEdgeKeys.clear();
+
+      scenario.path.forEach(id => highlightedPathNodeIds.add(id));
+      for (let i = 0; i < scenario.path.length - 1; i++) {
+        highlightedPathEdgeKeys.add(`${scenario.path[i]}->${scenario.path[i+1]}`);
+      }
+
+      const banner = document.getElementById('path-banner');
+      banner.classList.remove('hidden');
+      document.getElementById('path-banner-text').innerText = `已在 3D 空间中点亮五阶因果链路 (${scenario.path.length} 个实体)`;
+
+      // 3D Camera Teleport to Path Centroid
+      const pathNodes = nodes3D.filter(n => highlightedPathNodeIds.has(n.id));
+      if (pathNodes.length > 0) {
+        const centroid = new THREE.Vector3();
+        pathNodes.forEach(n => centroid.add(new THREE.Vector3(n.x, n.y, n.z)));
+        centroid.divideScalar(pathNodes.length);
+
+        const camPos = centroid.clone().add(new THREE.Vector3(0, 60, 220));
+        flyTo(camPos, centroid);
+      }
+
+      if (scenario.isRedline) {
+        document.getElementById('redline-title').innerText = scenario.title;
+        document.getElementById('redline-body').innerHTML = `
+          <p class="font-bold text-rose-300">★ 触发刚性安全互锁：</p>
+          <p>${scenario.redlineText}</p>
+          <p class="mt-2 text-rose-200/80">严禁违规蛮干，必须立即执行现场双人复核与应急处置！</p>
+        `;
+        document.getElementById('redline-modal').classList.remove('hidden');
+      }
+
+      // Render Result Card in Right Drawer
+      const resBox = document.getElementById('query-result-box');
+      resBox.innerHTML = `
+        <div class="p-3.5 rounded-lg border ${scenario.isRedline ? 'bg-rose-950/20 border-rose-500/80 shadow-lg glow-red' : 'bg-slate-900 border-cyan-500/60 shadow-lg glow-cyan'} space-y-3">
+          <div class="flex items-center justify-between">
+            <span class="text-[10px] font-bold px-2 py-0.5 rounded mono ${scenarioKey === 'global_h2' ? 'bg-purple-900 text-purple-200' : 'bg-cyan-900 text-cyan-200'}">
+              ${scenarioKey === 'global_h2' ? 'GLOBAL MAP-REDUCE 社区总结' : 'LOCAL 5-TIER CAUSAL 五阶因果穿透'}
+            </span>
+            <span class="text-[10px] text-slate-400">3D拓扑点亮</span>
+          </div>
+
+          <h3 class="text-sm font-bold text-white flex items-center gap-1.5">
+            ${scenario.isRedline ? '<i class="fa-solid fa-hand text-rose-500"></i>' : '<i class="fa-solid fa-cube text-cyan-400"></i>'}
+            <span>${scenario.title}</span>
+          </h3>
+
+          <div class="text-slate-200 leading-relaxed">
+            ${scenario.content}
+          </div>
+
+          <div class="pt-2 border-t border-slate-800 text-[10px] text-slate-400 flex items-center justify-between">
+            <span>出处溯源: ${scenario.source}</span>
+            <span class="text-cyan-400 cursor-pointer hover:underline" onclick="reZoomPath()">聚焦路径</span>
+          </div>
+        </div>
+      `;
+
+      updateVisualState();
+    }
+
+    window.reZoomPath = function() {
+      const pathNodes = nodes3D.filter(n => highlightedPathNodeIds.has(n.id));
+      if (pathNodes.length > 0) {
+        const centroid = new THREE.Vector3();
+        pathNodes.forEach(n => centroid.add(new THREE.Vector3(n.x, n.y, n.z)));
+        centroid.divideScalar(pathNodes.length);
+        flyTo(centroid.clone().add(new THREE.Vector3(0, 45, 190)), centroid);
+      }
+    };
+
+    // --- 13. Five-Tuple Inspector View Generator ---
+    function renderInspector(node) {
+      const placeholder = document.getElementById('inspector-placeholder');
+      const content = document.getElementById('inspector-content');
+
+      placeholder.classList.add('hidden');
+      content.classList.remove('hidden');
+
+      const cfg = ENTITY_CONFIG[node.type];
+      const comm = COMMUNITY_CONFIG[node.comm];
+
+      let relationsHTML = '';
+      node.edges.forEach(e => {
+        const other = e.source.id === node.id ? e.target : e.source;
+        const isOut = e.source.id === node.id;
+        relationsHTML += `
+          <div class="flex items-center justify-between p-2 rounded bg-slate-800/60 border border-slate-700/60 text-xs hover:border-cyan-500/60 transition group">
+            <div class="flex items-center space-x-1.5 overflow-hidden flex-1 cursor-pointer" onclick="window.focusEntity3D('${other.id}')">
+              <span class="text-[10px] text-slate-500">${isOut ? '➔' : '⬅'}</span>
+              <span class="px-1.5 py-0.5 rounded text-[10px] mono" style="background:${ENTITY_CONFIG[other.type].hex}25; color:${ENTITY_CONFIG[other.type].hex}">${ENTITY_CONFIG[other.type].label.split(' ')[0]}</span>
+              <span class="font-medium text-slate-200 truncate group-hover:text-cyan-300 transition">${other.name}</span>
+            </div>
+            <div class="flex items-center space-x-2">
+              <span class="text-[10px] text-cyan-400/80 px-1.5 py-0.5 rounded bg-cyan-950/60 border border-cyan-800/50">${e.label}</span>
+              <button onclick="window.focusEntity3D('${other.id}')" class="text-slate-400 hover:text-cyan-300 text-xs px-1" title="瞬移聚焦到此邻居节点">
+                <i class="fa-solid fa-arrow-up-right-from-square"></i>
+              </button>
+            </div>
+          </div>
+        `;
+      });
+
+      content.innerHTML = `
+        <div class="p-3.5 rounded-lg border" style="background:${cfg.hex}15; border-color:${cfg.hex}60">
+          <div class="flex items-center justify-between">
+            <span class="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded mono" style="background:${cfg.hex}; color:#020617">
+              ${cfg.label}
+            </span>
+            <span class="text-[10px] text-slate-400">${comm.name.split(':')[0]}</span>
+          </div>
+          <h2 class="text-base font-bold text-white mt-2">${node.name}</h2>
+          <p class="text-xs text-slate-300 mt-1 leading-relaxed">${node.desc}</p>
+        </div>
+
+        <div>
+          <div class="flex items-center justify-between mb-2">
+            <h4 class="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">五元组直接拓扑关联 (${node.degree} 链)</h4>
+            <span class="text-[10px] text-cyan-400">点击名称瞬移</span>
+          </div>
+          <div class="space-y-1.5 max-h-56 overflow-y-auto pr-1">
+            ${relationsHTML || '<div class="text-xs text-slate-500">暂无外部连接边</div>'}
+          </div>
+        </div>
+
+        <div class="pt-3 border-t border-slate-800/80">
+          <h4 class="text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-2">五元组标准处置 SOP 映射</h4>
+          <div class="p-2.5 rounded-lg bg-slate-900 border border-slate-800 text-xs space-y-1.5 text-slate-300">
+            <div class="flex items-center gap-1.5 text-emerald-400 font-semibold text-[11px]">
+              <i class="fa-regular fa-file-lines"></i>
+              <span>《散裂中子源运行事件与换样规程标准卡片》</span>
+            </div>
+            <p class="text-[11px] text-slate-400">已对齐 5-Tuple 实体本体 · 附带 EPICS PV 校验与刚性防损红线保护机制</p>
+          </div>
+        </div>
+      `;
+    }
+
+    window.focusEntity3D = function(nodeId) {
+      const node = nodeMap3D.get(nodeId);
+      if (node) {
+        selectNode3D(node);
+      }
+    };
+
+    // --- 14. UI Layout & HUD Event Listeners ---
+    function switchGraphRagDrawerTab(drawerKey) {
+      const searchTab = document.getElementById('tab-btn-search');
+      const inspectTab = document.getElementById('tab-btn-inspector');
+      const searchPanel = document.getElementById('panel-search');
+      const inspectPanel = document.getElementById('panel-inspector');
+
+      if (drawerKey === 'search') {
+        searchTab.classList.add('border-cyan-400', 'text-cyan-400', 'bg-slate-800/40');
+        searchTab.classList.remove('border-transparent', 'text-slate-400');
+        inspectTab.classList.remove('border-cyan-400', 'text-cyan-400', 'bg-slate-800/40');
+        inspectTab.classList.add('border-transparent', 'text-slate-400');
+        searchPanel.classList.remove('hidden');
+        inspectPanel.classList.add('hidden');
+      } else {
+        inspectTab.classList.add('border-cyan-400', 'text-cyan-400', 'bg-slate-800/40');
+        inspectTab.classList.remove('border-transparent', 'text-slate-400');
+        searchTab.classList.remove('border-cyan-400', 'text-cyan-400', 'bg-slate-800/40');
+        searchTab.classList.add('border-transparent', 'text-slate-400');
+        inspectPanel.classList.remove('hidden');
+        searchPanel.classList.add('hidden');
+      }
+    }
+
+    document.getElementById('tab-btn-search').addEventListener('click', () => switchGraphRagDrawerTab('search'));
+    document.getElementById('tab-btn-inspector').addEventListener('click', () => switchGraphRagDrawerTab('inspector'));
+
+    // Camera Presets
+    document.querySelectorAll('.cam-preset-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const type = btn.getAttribute('data-cam');
+        if (type === 'galaxy') {
+          flyTo(new THREE.Vector3(0, 190, 500), new THREE.Vector3(0, 0, 0));
+        } else if (type === 'water') {
+          flyTo(new THREE.Vector3(-145, 60, 240), new THREE.Vector3(-120, 0, 70));
+        } else if (type === 'cryo') {
+          flyTo(new THREE.Vector3(-120, 110, 160), new THREE.Vector3(-110, 10, -70));
+        } else if (type === 'target') {
+          flyTo(new THREE.Vector3(140, 100, 140), new THREE.Vector3(110, 0, -40));
+        }
+      });
+    });
+
+    // Preset Scenario buttons
+    document.querySelectorAll('.preset-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const scenarioKey = btn.getAttribute('data-scenario');
+        triggerScenario(scenarioKey);
+      });
+    });
+
+    document.getElementById('btn-run-search').addEventListener('click', () => {
+      const q = document.getElementById('search-input').value.toLowerCase().trim();
+      if (!q) return;
+      if (q.includes('色谱') || q.includes('氢') || q.includes('4%') || q.includes('排气')) {
+        triggerScenario('gc_h2');
+      } else if (q.includes('70') || q.includes('微漏') || q.includes('ccr') || q.includes('50pa') || q.includes('泵')) {
+        triggerScenario('ccr_vac');
+      } else if (q.includes('336') || q.includes('sensor') || q.includes('开路') || q.includes('heater')) {
+        triggerScenario('ls336_sensor');
+      } else if (q.includes('tc02') || q.includes('反射体') || q.includes('束流') || q.includes('65')) {
+        triggerScenario('beam_tilt');
+      } else if (q.includes('氦容器') || q.includes('漏水') || q.includes('400ml')) {
+        triggerScenario('ht_leak');
+      } else {
+        triggerScenario('global_h2');
+      }
+    });
+
+    document.getElementById('btn-clear-path').addEventListener('click', () => {
+      highlightedPathNodeIds.clear();
+      highlightedPathEdgeKeys.clear();
+      document.getElementById('path-banner').classList.add('hidden');
+      updateVisualState();
+    });
+
+    document.getElementById('btn-close-redline').addEventListener('click', () => {
+      document.getElementById('redline-modal').classList.add('hidden');
+    });
+
+    document.getElementById('pill-focus-btn').addEventListener('click', () => {
+      if (selectedNode) selectNode3D(selectedNode);
+    });
+    document.getElementById('pill-close-btn').addEventListener('click', () => {
+      clearSelectedNode();
+    });
+
+    document.getElementById('btn-toggle-rotate').addEventListener('click', () => {
+      autoRotate = !autoRotate;
+      controls.autoRotate = autoRotate;
+      document.getElementById('text-rotate').innerText = autoRotate ? '全景巡航: 开' : '全景巡航: 关';
+      document.getElementById('icon-rotate').className = autoRotate ? 'fa-solid fa-rotate text-cyan-400 animate-spin' : 'fa-solid fa-rotate text-cyan-400';
+    });
+
+    document.getElementById('btn-reset-cam').addEventListener('click', () => {
+      clearSelectedNode();
+      flyTo(new THREE.Vector3(0, 160, 520), new THREE.Vector3(0, 0, 0));
+    });
+
+    function updateHeaderStats() {
+      document.getElementById('stat-system').innerText = ENTITY_CONFIG.system.count;
+      document.getElementById('stat-device').innerText = ENTITY_CONFIG.device.count;
+      document.getElementById('stat-event').innerText = ENTITY_CONFIG.event.count;
+      document.getElementById('stat-parameter').innerText = ENTITY_CONFIG.parameter.count;
+      document.getElementById('stat-manual').innerText = ENTITY_CONFIG.manual.count;
+    }
+
+    // Sidebar Filters
+    function setupSidebarFilters() {
+      const elTypes = document.getElementById('entity-filter-list');
+      elTypes.innerHTML = '';
+      for (const [key, cfg] of Object.entries(ENTITY_CONFIG)) {
+        const item = document.createElement('div');
+        item.className = 'flex items-center justify-between text-xs p-1.5 rounded hover:bg-slate-800/60 cursor-pointer transition';
+        item.innerHTML = `
+          <label class="flex items-center space-x-2 cursor-pointer flex-1">
+            <input type="checkbox" checked data-type="${key}" class="rounded border-slate-700 text-cyan-500 focus:ring-0">
+            <span class="inline-block w-2.5 h-2.5 rounded-full" style="background:${cfg.hex}"></span>
+            <span class="text-slate-300 font-medium">${cfg.label.split(' ')[0]}</span>
+          </label>
+          <span class="text-[10px] text-slate-500 mono px-1.5 rounded bg-slate-800">${cfg.count}</span>
+        `;
+        elTypes.appendChild(item);
+      }
+
+      elTypes.querySelectorAll('input').forEach(chk => {
+        chk.addEventListener('change', e => {
+          const type = e.target.getAttribute('data-type');
+          if (e.target.checked) activeTypes.add(type);
+          else activeTypes.delete(type);
+          updateVisualState();
+        });
+      });
+
+      const elComm = document.getElementById('community-filter-list');
+      elComm.innerHTML = '';
+      for (const [key, cfg] of Object.entries(COMMUNITY_CONFIG)) {
+        const item = document.createElement('div');
+        item.className = 'flex items-center justify-between text-xs p-1.5 rounded hover:bg-slate-800/60 cursor-pointer transition';
+        item.innerHTML = `
+          <label class="flex items-center space-x-2 cursor-pointer flex-1">
+            <input type="checkbox" checked data-comm="${key}" class="rounded border-slate-700 text-cyan-500 focus:ring-0">
+            <span class="inline-block w-2 h-2 rounded" style="background:${cfg.hex}"></span>
+            <span class="text-slate-300 truncate">${cfg.name}</span>
+          </label>
+        `;
+        elComm.appendChild(item);
+      }
+
+      elComm.querySelectorAll('input').forEach(chk => {
+        chk.addEventListener('change', e => {
+          const comm = e.target.getAttribute('data-comm');
+          if (e.target.checked) activeCommunities.add(comm);
+          else activeCommunities.delete(comm);
+          updateVisualState();
+        });
+      });
+
+      document.getElementById('btn-select-all').addEventListener('click', () => {
+        document.querySelectorAll('#entity-filter-list input, #community-filter-list input').forEach(c => c.checked = true);
+        activeTypes = new Set(Object.keys(ENTITY_CONFIG));
+        activeCommunities = new Set(Object.keys(COMMUNITY_CONFIG));
+        updateVisualState();
+      });
+
+      document.getElementById('check-show-edge-labels').addEventListener('change', e => {
+        showEdgeLabels = e.target.checked;
+        edgeLabelGroup.visible = showEdgeLabels;
+      });
+
+      document.getElementById('check-show-hulls').addEventListener('change', e => {
+        showHulls = e.target.checked;
+        hullGroup.visible = showHulls;
+      });
+
+      document.getElementById('check-show-particles').addEventListener('change', e => {
+        showParticles = e.target.checked;
+        particleGroup.visible = showParticles;
+      });
+
+      document.getElementById('check-show-labels').addEventListener('change', e => {
+        showLabels = e.target.checked;
+        labelSpriteGroup.visible = showLabels;
+      });
+    }
+
+    // --- 15. Window Resize ---
+    function onWindowResize() {
+      const width = container.clientWidth;
+      const height = container.clientHeight;
+      // 视图隐藏时容器尺寸为 0，跳过以避免相机/画布被置零
+      if (!width || !height) return;
+      camera.aspect = width / height;
+      camera.updateProjectionMatrix();
+      renderer.setSize(width, height);
+    }
+
+    // --- 16. Main Animation Loop ---
+    function animate() {
+      requestAnimationFrame(animate);
+
+      updateCameraTween();
+
+      if (!isCamTweening) {
+        controls.update();
+      }
+
+      updateLaserParticles();
+
+      if (selectedNode && targetReticleMesh.visible) {
+        targetReticleMesh.position.set(selectedNode.x, selectedNode.y, selectedNode.z);
+        targetReticleMesh.lookAt(camera.position);
+        targetReticleMesh.rotation.z += 0.02;
+      }
+
+      if (starFieldPoints) {
+        starFieldPoints.rotation.y += 0.0003;
+      }
+
+      renderer.render(scene, camera);
+
+      const dist = Math.round(camera.position.distanceTo(controls.target));
+      document.getElementById('lbl-cam-dist').innerText = dist;
+
+      frameCount++;
+      const now = performance.now();
+      if (now - lastTime >= 1000) {
+        document.getElementById('stat-fps').innerText = `${frameCount} FPS`;
+        frameCount = 0;
+        lastTime = now;
+      }
+    }
+
+
+
+    window.GraphRAGApp = {
+      init() {
+        if (isGraphRagInitialized) return;
+        try {
+          initThree();
+          setupSidebarFilters();
+          isGraphRagInitialized = true;
+          setTimeout(() => {
+            onWindowResize();
+            flyTo(new THREE.Vector3(0, 160, 520), new THREE.Vector3(0, 0, 0), 900);
+          }, 100);
+          animate();
+        } catch (error) {
+          // WebGL/依赖异常时保持可重试，避免半初始化状态
+          isGraphRagInitialized = false;
+          const host = document.getElementById('webgl-container');
+          if (host) host.replaceChildren();
+          console.error('GraphRAG 初始化失败:', error);
+          if (typeof showToast === 'function') showToast('⚠️ 3D 图谱渲染初始化失败，请检查 WebGL 支持');
+        }
+      },
+      resize() {
+        if (isGraphRagInitialized && container && renderer && camera) onWindowResize();
+      }
+    };
+    let isGraphRagInitialized = false;
+
+  })();
   </script>
 </body>
 </html>
