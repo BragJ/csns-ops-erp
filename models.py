@@ -74,6 +74,9 @@ class ShiftTodo(Base):
     is_done: Mapped[bool] = mapped_column(Boolean, default=False, index=True, nullable=False)
     done_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
     created_by: Mapped[str] = mapped_column(String(80), default="", nullable=False)
+    completed_by: Mapped[Optional[str]] = mapped_column(String(80), nullable=True)
+    carried_over: Mapped[bool] = mapped_column(Boolean, default=False, index=True, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, index=True, nullable=False)
 
     shift: Mapped["DutyShift"] = relationship(back_populates="todos")
 

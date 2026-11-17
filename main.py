@@ -137,8 +137,113 @@ def ensure_assist_param_column(db: Session) -> None:
     db.commit()
 
 
+def ensure_shift_todo_columns(db: Session) -> None:
+    """为既有 SQLite 库补齐待办滚动留存字段，历史数据按创建班次时间回填。"""
+    columns = {column["name"] for column in inspect(engine).get_columns("shift_todos")}
+    if "completed_by" not in columns:
+        db.execute(text("ALTER TABLE shift_todos ADD COLUMN completed_by VARCHAR(80)"))
+        db.commit()
+    if "carried_over" not in columns:
+        db.execute(text("ALTER TABLE shift_todos ADD COLUMN carried_over BOOLEAN NOT NULL DEFAULT 0"))
+        db.execute(text("CREATE INDEX IF NOT EXISTS ix_shift_todos_carried_over ON shift_todos (carried_over)"))
+        db.commit()
+    if "created_at" not in columns:
+        db.execute(text("ALTER TABLE shift_todos ADD COLUMN created_at DATETIME"))
+        db.execute(
+            text(
+                "UPDATE shift_todos SET created_at = COALESCE("
+                "(SELECT planned_start FROM duty_shifts WHERE duty_shifts.id = shift_todos.shift_id), due_at)"
+                " WHERE created_at IS NULL"
+            )
+        )
+        db.commit()
+
+    db.execute(
+        text(
+            "UPDATE shift_todos SET completed_by = COALESCE(NULLIF(completed_by, ''), created_by)"
+            " WHERE is_done = 1 AND completed_by IS NULL"
+        )
+    )
+    db.commit()
+
+    recalibrate_todo_timestamps(db)
+
+
+def recalibrate_todo_timestamps(db: Session) -> None:
+    """校准被迁移批量写入的完成时间（仅针对明显的批量污染行）。
+
+    早期补列时，一批历史已完成行的 done_at 被写成同一分钟内连续的时刻，
+    而它们的业务约定时间却横跨多日。这类“同批密集写入 + 业务跨度极大”的
+    特征即为迁移污染，此时把 done_at 回落到业务约定时间；正常单条完成记录
+    不受影响，历史审计语义得以保留。
+    """
+    rows = db.scalars(select(ShiftTodo).where(ShiftTodo.is_done.is_(True))).all()
+    batches: dict[datetime, list[ShiftTodo]] = {}
+    for todo in rows:
+        if todo.done_at is None:
+            continue
+        key = todo.done_at.replace(second=0, microsecond=0)
+        batches.setdefault(key, []).append(todo)
+
+    changed = False
+    for todos in batches.values():
+        if len(todos) < 3:
+            continue
+        due_times = [todo.due_at for todo in todos if todo.due_at is not None]
+        if len(due_times) < 3 or (max(due_times) - min(due_times)) <= timedelta(days=3):
+            continue
+        for todo in todos:
+            if todo.due_at is None:
+                continue
+            if abs(todo.done_at - todo.due_at) > timedelta(days=3):
+                todo.done_at = todo.due_at
+                changed = True
+    if changed:
+        db.commit()
+
+
 def iso(value: Optional[datetime]) -> Optional[str]:
     return value.isoformat(timespec="seconds") if value else None
+
+
+TODO_RETENTION_DAYS = 7
+
+
+def todo_retention_anchor(todo: ShiftTodo) -> Optional[datetime]:
+    """待办留存锚点：完成时间优先，其次创建时间，最后回落业务约定时间。
+
+    历史行补列时 done_at 可能被批量写成迁移当天（见 recalibrate_todo_timestamps），
+    该函数会在启动时先行修正，因此这里可以安全地以完成时间为准，
+    既避免旧记录误驻留，也不会误伤“跨班继承后才完成”的近期记录。
+    """
+    for value in (todo.done_at, todo.created_at, todo.due_at):
+        if value is not None:
+            return value
+    return None
+
+
+def todo_is_visible(todo: ShiftTodo, now: Optional[datetime] = None) -> bool:
+    """滚动留存窗口：未完成待办永久保留，已完成仅保留最近一周（7 天）。"""
+    if not todo.is_done:
+        return True
+    anchor = todo_retention_anchor(todo)
+    if anchor is None:
+        return False
+    cutoff = (now or utcnow()) - timedelta(days=TODO_RETENTION_DAYS)
+    return anchor >= cutoff
+
+
+def list_visible_todos(db: Session, shift_id: Optional[int] = None) -> list[ShiftTodo]:
+    """跨班拉取待办清单：待执行在前（按约定时间升序），已完成在后（按完成时间倒序）。"""
+    now = utcnow()
+    items = [item for item in db.scalars(select(ShiftTodo)).all() if todo_is_visible(item, now)]
+    pending = sorted((item for item in items if not item.is_done), key=lambda item: item.due_at)
+    done = sorted(
+        (item for item in items if item.is_done),
+        key=lambda item: todo_retention_anchor(item) or datetime.min,
+        reverse=True,
+    )
+    return pending + done
 
 
 def display_time(value: Optional[datetime]) -> str:
@@ -386,6 +491,7 @@ async def lifespan(_app: FastAPI):
     Base.metadata.create_all(bind=engine)
     with SessionLocal() as db:
         ensure_assist_param_column(db)
+        ensure_shift_todo_columns(db)
         seed_database(db)
         if db.scalar(select(EpicsAlarmPV).limit(1)) is None:
             try:
@@ -593,11 +699,16 @@ def slot_dict(slot: PatrolSlot) -> dict:
 def todo_dict(todo: ShiftTodo) -> dict:
     return {
         "id": todo.id,
+        "shiftId": todo.shift_id,
         "time": todo.due_at.strftime("%Y-%m-%d %H:%M"),
         "due_at": iso(todo.due_at),
         "text": todo.content,
         "done": todo.is_done,
-        "doneAt": display_minute(todo.done_at) if todo.done_at else "",
+        "doneAt": todo.done_at.strftime("%Y-%m-%d %H:%M") if todo.done_at else "",
+        "createdBy": todo.created_by or "",
+        "completedBy": todo.completed_by or "",
+        "carriedOver": bool(todo.carried_over),
+        "createdAt": iso(todo.created_at),
     }
 
 
@@ -916,26 +1027,40 @@ def switch_shift_type(shift_id: int, payload: ShiftPayload, _user: User = Depend
 
 @app.get("/api/v1/shifts/{shift_id}/todos")
 def list_todos(shift_id: int, _user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    return [todo_dict(item) for item in db.scalars(select(ShiftTodo).where(ShiftTodo.shift_id == shift_id).order_by(ShiftTodo.due_at)).all()]
+    # 跨班滚动视图：不再按 shift_id 硬隔离，未闭环待办全量继承
+    return [todo_dict(item) for item in list_visible_todos(db)]
 
 
 @app.post("/api/v1/shifts/{shift_id}/todos", status_code=status.HTTP_201_CREATED)
 def create_todo(shift_id: int, payload: TodoCreatePayload, user: User = Depends(require_operator_or_admin), db: Session = Depends(get_db)):
     if db.get(DutyShift, shift_id) is None:
         raise HTTPException(status_code=404, detail="班次不存在")
-    todo = ShiftTodo(shift_id=shift_id, due_at=as_naive_utc(payload.due_at), content=payload.content.strip(), created_by=user.real_name)
+    todo = ShiftTodo(
+        shift_id=shift_id,
+        due_at=as_naive_utc(payload.due_at),
+        content=payload.content.strip(),
+        created_by=user.real_name,
+        carried_over=False,
+        created_at=utcnow(),
+    )
     db.add(todo)
     db.commit()
     return todo_dict(todo)
 
 
 @app.patch("/api/v1/todos/{todo_id}")
-def update_todo(todo_id: int, payload: TodoUpdatePayload, _user: User = Depends(require_operator_or_admin), db: Session = Depends(get_db)):
+def update_todo(todo_id: int, payload: TodoUpdatePayload, user: User = Depends(require_operator_or_admin), db: Session = Depends(get_db)):
     todo = db.get(ShiftTodo, todo_id)
     if todo is None:
         raise HTTPException(status_code=404, detail="待办不存在")
     todo.is_done = payload.is_done
-    todo.done_at = utcnow() if payload.is_done else None
+    if payload.is_done:
+        todo.done_at = utcnow()
+        todo.completed_by = user.real_name
+    else:
+        todo.done_at = None
+        todo.completed_by = None
+        todo.carried_over = False
     db.commit()
     return todo_dict(todo)
 
@@ -1481,7 +1606,8 @@ def handover_preview(shift_id: int, _user: User = Depends(get_current_user), db:
     if shift is None:
         raise HTTPException(status_code=404, detail="班次不存在")
     alarms = [log_dict(item) for item in db.scalars(select(ShiftLog).where(ShiftLog.shift_id == shift_id, ShiftLog.status != "已闭环").order_by(ShiftLog.occurred_at.desc())).all()]
-    todos = [todo_dict(item) for item in db.scalars(select(ShiftTodo).where(ShiftTodo.shift_id == shift_id, ShiftTodo.is_done.is_(False)).order_by(ShiftTodo.due_at)).all()]
+    # 跨班继承：所有未完成待办都要在本班交接单上列明
+    todos = [todo_dict(item) for item in db.scalars(select(ShiftTodo).where(ShiftTodo.is_done.is_(False)).order_by(ShiftTodo.due_at)).all()]
     return {"shift": shift_dict(shift), "unclosed_alarms": alarms, "open_todos": todos}
 
 
@@ -1494,7 +1620,11 @@ def create_handover(shift_id: int, payload: HandoverPayload, user: User = Depend
         if db.scalar(select(ShiftHandover).where(ShiftHandover.shift_id == shift_id, ShiftHandover.status == "archived")):
             raise HTTPException(status_code=409, detail="该班次已完成交接归档")
         alarms = [log_dict(item) for item in db.scalars(select(ShiftLog).where(ShiftLog.shift_id == shift_id, ShiftLog.status != "已闭环")).all()]
-        todos = [todo_dict(item) for item in db.scalars(select(ShiftTodo).where(ShiftTodo.shift_id == shift_id, ShiftTodo.is_done.is_(False))).all()]
+        pending_todos = db.scalars(select(ShiftTodo).where(ShiftTodo.is_done.is_(False))).all()
+        todos = [todo_dict(item) for item in pending_todos]
+        # 严禁清空/删除备忘：仅将未完成项标记为跨班继承，供后续班次持续查看
+        for item in pending_todos:
+            item.carried_over = True
         handover = ShiftHandover(
             shift_id=shift.id,
             outgoing_leader_name=shift.leader_name,
@@ -1565,7 +1695,7 @@ def submit_sop(payload: SopSubmitPayload, user: User = Depends(require_operator_
 def dashboard_summary(_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     shift = get_active_shift(db)
     slots = db.scalars(select(PatrolSlot).where(PatrolSlot.shift_id == shift.id)).all()
-    todos = db.scalars(select(ShiftTodo).where(ShiftTodo.shift_id == shift.id)).all()
+    todos = list_visible_todos(db)
     unresolved_logs = db.scalar(select(func.count()).select_from(ShiftLog).where(ShiftLog.shift_id == shift.id, ShiftLog.status != "已闭环")) or 0
     stage_counts = {stage: db.scalar(select(func.count()).select_from(Event).where(Event.stage == stage)) or 0 for stage in STAGES}
     return {
@@ -1585,7 +1715,7 @@ def bootstrap(_user: User = Depends(get_current_user), db: Session = Depends(get
     events = db.scalars(select(Event).options(selectinload(Event.history)).order_by(Event.created_at.desc())).all()
     nav_items = db.scalars(select(NavItem).where(NavItem.is_active.is_(True)).order_by(NavItem.sort_order, NavItem.id)).all()
     logs = db.scalars(select(ShiftLog).where(ShiftLog.shift_id == shift.id).order_by(ShiftLog.occurred_at.desc()).limit(200)).all()
-    todos = db.scalars(select(ShiftTodo).where(ShiftTodo.shift_id == shift.id).order_by(ShiftTodo.due_at)).all()
+    todos = list_visible_todos(db)
     slots = sorted(shift.patrol_slots, key=lambda item: item.planned_at)
     return {
         "shift": shift_dict(shift),

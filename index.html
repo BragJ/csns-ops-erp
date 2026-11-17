@@ -622,9 +622,12 @@
                   <i class="ph ph-calendar-check text-amber-400 text-lg"></i>
                   <h3 class="font-bold text-sm text-white">班次定时待办与琐事备忘 (To-Dos & Memos)</h3>
                 </div>
-                <span class="text-[11px] font-mono px-2 py-0.5 rounded bg-amber-500/10 text-amber-300 border border-amber-500/30" id="uncompletedTodoBadge">2项待执行</span>
+                <div class="flex items-center gap-1.5 flex-wrap justify-end">
+                  <span class="px-2 py-0.5 rounded text-[10px] font-mono bg-sky-500/15 text-sky-300 border border-sky-500/30" title="未完成待办永久继承；已完成项保留近一周（7 天）供各班次了解工作动态">近一周跨班留存 (7天)</span>
+                  <span class="text-[11px] font-mono px-2 py-0.5 rounded bg-amber-500/10 text-amber-300 border border-amber-500/30" id="uncompletedTodoBadge">2项待执行</span>
+                </div>
               </div>
-              <p class="text-xs text-slate-400 mb-3">管理如“20:00 协助天车吊装”、“02:00 关快门 Shutter”、“借还剂量仪”等关键交接任务。</p>
+              <p class="text-xs text-slate-400 mb-3">管理如“20:00 协助天车吊装”、“02:00 关快门 Shutter”、“借还剂量仪”等关键交接任务；交接班不清空，未完成项自动跨班继承。</p>
 
               <!-- To-do list -->
               <div class="space-y-2 max-h-[220px] overflow-y-auto pr-1" id="todoListContainer">
@@ -4508,6 +4511,159 @@
     // ==========================================
     // 2. 班次定时待办与跑腿琐事备忘录 (权限降级)
     // ==========================================
+    const TODO_RETENTION_MS = 7 * 24 * 60 * 60 * 1000; // 近一周（168 小时）跨班滚动留存
+    // 迁移污染判定阈值：展示时间与完成时间背离超过 3 天，视为后端补列时写入的默认时间戳
+    const TODO_TIMESTAMP_DRIFT_MS = 3 * 24 * 60 * 60 * 1000;
+
+    function todoEscapeHtml(value) {
+      return String(value == null ? '' : value)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+    }
+
+    // 业务时间字符串解析：支持 YYYY-MM-DD HH:mm / MM-DD HH:mm / HH:mm
+    function todoParseClock(value, nowRef) {
+      if (value === null || value === undefined || value === '') return NaN;
+      if (typeof value === 'number') return value;
+      if (value instanceof Date) return value.getTime();
+
+      const now = nowRef || new Date();
+      const raw = String(value).trim().replace(/\//g, '-');
+      if (!raw) return NaN;
+
+      // 1) 带 4 位年份：YYYY-MM-DD [HH:mm[:ss]]
+      const full = raw.match(/^(\d{4})-(\d{1,2})-(\d{1,2})(?:[ T](\d{1,2}):(\d{2})(?::(\d{2}))?)?/);
+      if (full) {
+        const ts = new Date(+full[1], +full[2] - 1, +full[3], +(full[4] || 0), +(full[5] || 0), +(full[6] || 0)).getTime();
+        if (!isNaN(ts)) return ts;
+      }
+
+      // 2) 无年份：MM-DD HH:mm（跨年时自动回退到上一年）
+      const short = raw.match(/^(\d{1,2})-(\d{1,2})(?:[ T](\d{1,2}):(\d{2}))?/);
+      if (short) {
+        const month = +short[1];
+        const day = +short[2];
+        let year = now.getFullYear();
+        if (now.getMonth() === 0 && month === 12) year -= 1;
+        const ts = new Date(year, month - 1, day, +(short[3] || 0), +(short[4] || 0), 0, 0).getTime();
+        if (!isNaN(ts)) return ts;
+      }
+
+      // 3) 仅时分：HH:mm（视为当天）
+      const clock = raw.match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?$/);
+      if (clock) {
+        return new Date(now.getFullYear(), now.getMonth(), now.getDate(), +clock[1], +clock[2], +(clock[3] || 0)).getTime();
+      }
+
+      return NaN;
+    }
+
+    // 后端 ISO 串解析：无时区的 UTC 串补 Z，避免按本地时区二次偏移
+    function todoParseIsoUtc(value) {
+      if (!value) return NaN;
+      const raw = String(value).trim();
+      if (!/^\d{4}-\d{2}-\d{2}/.test(raw)) return NaN;
+      const normalized = /^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}(:\d{2})?$/.test(raw)
+        ? `${raw.replace(' ', 'T')}Z`
+        : raw.replace(' ', 'T');
+      const ts = new Date(normalized).getTime();
+      return isNaN(ts) ? NaN : ts;
+    }
+
+    function isTodoDone(item) {
+      return item.status === 'done' || item.done === true;
+    }
+
+    /**
+     * 待办真实业务时间戳（毫秒）。
+     * 优先采用列表上展示的业务时间（约定时间），其次才回落后端时间戳：
+     * 历史数据补列时写入的迁移默认完成时间会污染判定，不能直接用来决定 7 天留存。
+     */
+    function parseTodoRealTimeMs(item) {
+      if (!item) return NaN;
+      const nowMs = Date.now();
+
+      let displayMs = NaN;
+      for (const candidate of [item.time, item.target_time, item.dueAt, item.due_at]) {
+        const parsed = todoParseClock(candidate);
+        if (!isNaN(parsed)) { displayMs = parsed; break; }
+      }
+
+      const completedMs = [item.completedAt, item.doneAt, item.createdAt]
+        .map(todoParseIsoUtc)
+        .filter(ts => !isNaN(ts))
+        .reduce((a, b) => (a > b ? a : b), NaN);
+
+      // 展示时间与完成时间严重背离（>3 天）时，判定完成时间戳被迁移批量写入污染，
+      // 此时以列表上的业务时间为准，防止十天前的旧记录被当成“刚完成”而长期驻留。
+      if (!isNaN(displayMs) && !isNaN(completedMs)) {
+        const divergent = Math.abs(completedMs - displayMs) > TODO_TIMESTAMP_DRIFT_MS;
+        const chosen = divergent ? Math.min(displayMs, completedMs) : completedMs;
+        return Math.min(chosen, nowMs);
+      }
+      if (!isNaN(completedMs)) return Math.min(completedMs, nowMs);
+      if (!isNaN(displayMs)) return Math.min(displayMs, nowMs);
+      return NaN;
+    }
+
+    function formatTodoTime(value) {
+      const raw = String(value == null ? '' : value).trim();
+      if (!raw) return '--';
+
+      // 带时区信息的 ISO 串按浏览器本地时区展示
+      if (/Z$|[+-]\d{2}:?\d{2}$/.test(raw)) {
+        const ts = new Date(raw).getTime();
+        if (!isNaN(ts)) {
+          const d = new Date(ts);
+          return `${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+        }
+      }
+
+      // 业务时间字符串按字面量格式化，杜绝时区二次换算
+      const m = raw.replace(/\//g, '-').match(/^(?:\d{4}-)?(\d{1,2})-(\d{1,2})(?:[ T](\d{1,2}):(\d{2}))?/);
+      if (m) {
+        return `${String(+m[1]).padStart(2, '0')}-${String(+m[2]).padStart(2, '0')} ${String(+(m[3] || 0)).padStart(2, '0')}:${String(+(m[4] || 0)).padStart(2, '0')}`;
+      }
+      const clock = raw.match(/^(\d{1,2}):(\d{2})/);
+      if (clock) return `${clock[1].padStart(2, '0')}:${clock[2]}`;
+      return raw;
+    }
+
+    function getVisibleTodos() {
+      const nowMs = Date.now();
+      const visibleTodos = (shiftTodos || []).filter(item => {
+        // 未完成的【待执行】事项：无论多少天前创建，永久保留直到人工勾选完成
+        if (!isTodoDone(item)) return true;
+
+        // 已完成的【已完成】事项：严格只保留最近一周（7 天 / 168 小时）内的记录
+        const itemTimeMs = parseTodoRealTimeMs(item);
+        if (!itemTimeMs || isNaN(itemTimeMs)) return false;
+        return (nowMs - itemTimeMs) <= TODO_RETENTION_MS;
+      });
+
+      const pending = visibleTodos.filter(item => !isTodoDone(item))
+        .sort((a, b) => {
+          const left = todoParseClock(a.dueAt || a.time);
+          const right = todoParseClock(b.dueAt || b.time);
+          if (isNaN(left) && isNaN(right)) return 0;
+          if (isNaN(left)) return 1;
+          if (isNaN(right)) return -1;
+          return left - right;
+        });
+      const done = visibleTodos.filter(isTodoDone)
+        .sort((a, b) => {
+          const left = parseTodoRealTimeMs(a);
+          const right = parseTodoRealTimeMs(b);
+          if (isNaN(left) && isNaN(right)) return 0;
+          if (isNaN(left)) return 1;
+          if (isNaN(right)) return -1;
+          return right - left;
+        });
+      return pending.concat(done);
+    }
+
     function renderTodos() {
       const container = document.getElementById('todoListContainer');
       if (!container) return;
@@ -4517,28 +4673,40 @@
       let completed = 0;
       const isViewer = (currentUser.role === 'viewer');
 
-      shiftTodos.forEach(item => {
+      const visibleTodos = getVisibleTodos();
+      visibleTodos.forEach(item => {
         if (!item.done) uncompleted++; else completed++;
 
         const row = document.createElement('div');
         row.className = `p-2.5 rounded-lg border flex items-center justify-between text-xs transition-colors ${item.done ? 'bg-slate-900/40 border-slate-800/80 text-slate-500' : 'bg-slate-900 border-amber-500/30 text-slate-200'}`;
 
+        const isCrossShift = item.carriedOver
+          || (!!currentShift && item.shiftId != null && String(item.shiftId) !== String(currentShift.id));
+        const carriedBadge = (!item.done && isCrossShift)
+          ? `<span class="text-[10px] font-mono px-1.5 py-0.5 rounded bg-orange-500/15 text-orange-300 border border-orange-500/40">跨班继承</span>`
+          : '';
+        const doneBadge = item.done
+          ? `<span class="text-[10px] font-mono px-1.5 py-0.5 rounded bg-emerald-500/15 text-emerald-300 border border-emerald-500/40">已完成</span>
+             <span class="text-[10px] text-slate-500 font-mono">${todoEscapeHtml(item.completedBy || '值班员')} 已核销</span>`
+          : '';
+
         row.innerHTML = `
-          <div class="flex items-center gap-2.5 flex-1 pr-2">
+          <div class="flex items-center gap-2.5 flex-1 pr-2 min-w-0">
             ${!isViewer ? `
-              <button onclick="toggleTodoDone('${item.id}')" class="w-4 h-4 rounded flex items-center justify-center transition-colors ${item.done ? 'bg-emerald-500 text-white' : 'border border-slate-600 bg-slate-800 hover:border-amber-400'}">
+              <button onclick="toggleTodoDone('${item.id}')" class="w-4 h-4 shrink-0 rounded flex items-center justify-center transition-colors ${item.done ? 'bg-emerald-500 text-white' : 'border border-slate-600 bg-slate-800 hover:border-amber-400'}">
                 ${item.done ? '<i class="ph ph-check text-[10px] font-bold"></i>' : ''}
               </button>
             ` : `
-              <span class="w-4 h-4 rounded flex items-center justify-center ${item.done ? 'bg-emerald-600/30 text-emerald-400' : 'border border-slate-700 text-transparent'}">
+              <span class="w-4 h-4 shrink-0 rounded flex items-center justify-center ${item.done ? 'bg-emerald-600/30 text-emerald-400' : 'border border-slate-700 text-transparent'}">
                 ${item.done ? '<i class="ph ph-check text-[10px]"></i>' : ''}
               </span>
             `}
-            <span class="font-mono text-xs px-1.5 py-0.5 rounded ${item.done ? 'bg-slate-800 text-slate-500' : 'bg-amber-500/20 text-amber-300 font-bold'}">${item.time}</span>
-            <span class="leading-relaxed ${item.done ? 'line-through text-slate-500' : 'font-medium'}">${item.text}</span>
+            <span class="font-mono text-xs px-1.5 py-0.5 rounded shrink-0 whitespace-nowrap ${item.done ? 'bg-slate-800 text-slate-500' : 'bg-amber-500/20 text-amber-300 font-bold'}">${formatTodoTime(item.time)}</span>
+            <span class="leading-relaxed truncate ${item.done ? 'line-through text-slate-500' : 'font-medium'}" title="${todoEscapeHtml(item.text)}">${todoEscapeHtml(item.text)}</span>
+            ${carriedBadge}
           </div>
-          <div class="flex items-center gap-1 shrink-0">
-            ${item.done ? `<span class="text-[10px] text-slate-500 font-mono">${item.doneAt} 完成</span>` : `<span class="text-[10px] text-amber-400">待执行</span>`}
+          <div class="flex items-center gap-1.5 shrink-0">
+            ${item.done ? doneBadge : `<span class="text-[10px] text-amber-400">待执行</span>`}
             ${!isViewer ? `
               <button onclick="deleteTodo('${item.id}')" class="text-slate-600 hover:text-rose-400 ml-1"><i class="ph ph-trash"></i></button>
             ` : ''}
@@ -4547,7 +4715,7 @@
         container.appendChild(row);
       });
 
-      setSafeText('statTodoProgress', `${completed}/${shiftTodos.length}`);
+      setSafeText('statTodoProgress', `${completed}/${visibleTodos.length}`);
       const badge = document.getElementById('uncompletedTodoBadge');
       if (badge) {
         badge.innerText = `${uncompleted}项待执行`;
@@ -4563,7 +4731,10 @@
       const item = shiftTodos.find(t => t.id === id);
       if (item) {
         item.done = !item.done;
-        item.doneAt = item.done ? new Date().toTimeString().split(' ')[0].substring(0, 5) : '';
+        item.doneAt = item.done ? formatTodoTime(new Date().toISOString()) : '';
+        item.completedAt = item.done ? new Date().toISOString() : '';
+        item.completedBy = item.done ? (currentUser.name || '值班员') : '';
+        if (!item.done) item.carriedOver = false;
         renderTodos();
         showToast('待办状态已更新！');
       }
@@ -4586,7 +4757,11 @@
         time: formattedTime,
         text: text,
         done: false,
-        doneAt: ''
+        doneAt: '',
+        completedAt: '',
+        completedBy: '',
+        carriedOver: false,
+        createdAt: formattedTime
       });
 
       document.getElementById('newTodoContent').value = '';
@@ -4639,11 +4814,11 @@
 
       const tTbody = document.getElementById('pdfTodoTableBody');
       tTbody.innerHTML = '';
-      shiftTodos.forEach(td => {
+      getVisibleTodos().forEach(td => {
         const tr = document.createElement('tr');
         tr.innerHTML = `
-          <td style="border: 1px solid #000; padding: 4px; text-align: center; font-weight: bold;">${td.time}</td>
-          <td style="border: 1px solid #000; padding: 4px; text-align: center;">${td.done ? '<span style="color:#060; font-weight:bold;">已落实完成</span>' : '<span style="color:#a60;">待办流转中</span>'}</td>
+          <td style="border: 1px solid #000; padding: 4px; text-align: center; font-weight: bold;">${formatTodoTime(td.time)}</td>
+          <td style="border: 1px solid #000; padding: 4px; text-align: center;">${td.done ? `<span style="color:#060; font-weight:bold;">已落实完成 (${td.completedBy || '值班员'})</span>` : (td.carriedOver ? '<span style="color:#a60;">待办流转中 (跨班继承)</span>' : '<span style="color:#a60;">待办流转中</span>')}</td>
           <td style="border: 1px solid #000; padding: 4px; word-break: break-all;">${td.text}</td>
         `;
         tTbody.appendChild(tr);
@@ -6839,7 +7014,7 @@
         await apiRequest(`/shifts/${currentShift.id}/handovers`, { method: 'POST', body: { next_leader_name: signer } });
         closeHandoverModal();
         await refreshAllData();
-        showToast(`交接班签名归档完成！接班人 [${signer}] 已接管，下一班次已自动建立`);
+        showToast(`交接班归档完成！接班人 [${signer}] 已接管；未完成待办已标记跨班继承，近一周（7 天）备忘继续保留`);
       } catch (error) {
         showToast(`⚠️ ${error.message}`);
       }
@@ -7085,7 +7260,7 @@
           preview.open_todos.forEach(item => {
             const row = document.createElement('div');
             row.className = 'flex items-start gap-2';
-            row.innerHTML = `<span class="text-amber-400 font-bold">•</span><div><strong>[待办任务继承]</strong> ${item.time} ${item.text} (需接班人按时执行)</div>`;
+            row.innerHTML = `<span class="text-amber-400 font-bold">•</span><div><strong>[待办任务继承]</strong> ${formatTodoTime(item.time)} ${todoEscapeHtml(item.text)} (需接班人按时执行，交接后不清空)</div>`;
             pendingList.appendChild(row);
           });
         }
