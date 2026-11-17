@@ -575,7 +575,7 @@
               </button>
               <button onclick="exportShiftPDF()" class="w-full bg-gradient-to-r from-sky-600 to-cyan-600 hover:from-sky-500 hover:to-cyan-500 text-white text-xs font-semibold py-2 px-2 rounded-lg flex items-center justify-center gap-1 shadow-md shadow-sky-600/30 transition-all">
                 <i class="ph ph-file-pdf text-sm"></i>
-                <span>导出横版PDF</span>
+                <span>导出运行值班记录PDF</span>
               </button>
             </div>
           </div>
@@ -2673,7 +2673,7 @@
       
       <!-- Report Title Header -->
       <div style="text-align: center; border-bottom: 2px solid #000; padding-bottom: 8px; margin-bottom: 12px;">
-        <h2 style="font-size: 21px; font-weight: bold; margin: 0; letter-spacing: 1.5px; color: #000;">中国散裂中子源 (CSNS) · 靶站谱仪运行值班记录表</h2>
+        <h2 style="font-size: 21px; font-weight: bold; margin: 0; letter-spacing: 1.5px; color: #000;">靶站谱仪运行值班记录</h2>
         <div style="font-size: 12px; color: #444; margin-top: 3px; font-family: 'Inter', sans-serif;">Target Station & Spectrometer Daily Operations Duty Log</div>
       </div>
 
@@ -2753,7 +2753,7 @@
           <div><strong>接班签章：</strong> 周科 (已核验)</div>
         </div>
         <div style="border-top: 1px dashed #bbb; padding-top: 5px; display: flex; justify-content: space-between; font-size: 10.5px; color: #555;">
-          <span><strong>审计防伪戳 (SHA-256)：</strong> <code id="pdfSecurityHash" style="font-family: monospace;">CSNS-9A8F2C7104B28D7E6F1A90C4</code></span>
+          <span><strong>审计防伪戳 (SHA-256)：</strong> <code id="pdfSecurityHash" style="font-family: monospace;">9A8F2C7104B28D7E6F1A90C4</code></span>
           <span><strong>生成时间：</strong> <span id="pdfExportTimestamp">2026-11-04 17:30:15</span></span>
         </div>
       </div>
@@ -4838,19 +4838,20 @@
         lTbody.appendChild(tr);
       });
 
-      const mockHash = 'CSNS-' + Math.random().toString(36).substring(2, 10).toUpperCase() + '-' + Date.now().toString(16).toUpperCase();
+      const mockHash = Math.random().toString(36).substring(2, 10).toUpperCase() + '-' + Date.now().toString(16).toUpperCase();
       document.getElementById('pdfSecurityHash').innerText = mockHash;
       document.getElementById('pdfExportTimestamp').innerText = `${dateStr} ${timeStr}`;
       document.getElementById('pdfSignPair').innerText = `${leader} (值班长)、${op} (值班员)、${student} (学生)`;
 
       const printWrapper = document.getElementById('pdfPrintWrapper');
       const element = document.getElementById('printableShiftReport');
-      
+      const reportBaseName = `靶站谱仪运行值班记录_${dateStr}_${isDayShift ? '白班' : '夜班'}`;
+
       printWrapper.style.display = 'block';
 
       const opt = {
         margin: [10, 10, 10, 10],
-        filename: `CSNS_靶站谱仪运行值班记录表_${dateStr}_${isDayShift ? '白班' : '夜班'}.pdf`,
+        filename: `${reportBaseName}.pdf`,
         image: { type: 'jpeg', quality: 0.98 },
         html2canvas: { 
           scale: 2, 
@@ -4865,14 +4866,29 @@
         jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
       };
 
-      showToast('正在导出标准 A4 工业值班记录表...');
+      showToast('正在导出【靶站谱仪运行值班记录】...');
 
       html2pdf().set(opt).from(element).save().then(() => {
         printWrapper.style.display = 'none';
-        showToast('A4 值班表 PDF 导出成功！版面规整居中，已下载到本地。');
+        showToast('【靶站谱仪运行值班记录】PDF 导出成功，已下载到本地。');
       }).catch(() => {
-        printWrapper.style.display = 'none';
-        window.print();
+        // 降级为浏览器原生打印：临时切换标题，确保“另存为 PDF”的默认文件名一致
+        const originalTitle = document.title;
+        document.title = reportBaseName;
+        const restoreTitle = () => {
+          document.title = originalTitle;
+          window.removeEventListener('afterprint', restoreTitle);
+        };
+        window.addEventListener('afterprint', restoreTitle);
+        try {
+          window.print();
+        } finally {
+          // 部分浏览器不触发 afterprint，兜底延迟恢复
+          setTimeout(() => {
+            printWrapper.style.display = 'none';
+            restoreTitle();
+          }, 1000);
+        }
       });
     }
 

@@ -1739,7 +1739,15 @@ def bootstrap(_user: User = Depends(get_current_user), db: Session = Depends(get
 def serve_index():
     if not INDEX_FILE.exists():
         raise HTTPException(status_code=404, detail="index.html 不存在")
-    return FileResponse(INDEX_FILE)
+    # 单页应用入口禁用浏览器缓存，确保发版后内网客户端立即拿到最新页面
+    return FileResponse(
+        INDEX_FILE,
+        headers={
+            "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
+            "Pragma": "no-cache",
+            "Expires": "0",
+        },
+    )
 
 
 if __name__ == "__main__":
