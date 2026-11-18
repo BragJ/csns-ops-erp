@@ -483,6 +483,9 @@
           </button>
         </div>
 
+        <!-- 历史班次 / 封班台账横幅（管理员修订模式 / 只读存档模式） -->
+        <div id="shiftHistoryBanner" class="hidden rounded-xl p-3 items-center justify-between gap-3"></div>
+
         <!-- 卡片一排：模式选择 + 10人排班岗位责任制 (三人班次) + 巡查待办统计 + 快速导出 -->
         <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
           <!-- 束流模式下拉选择 -->
@@ -567,6 +570,16 @@
             <div class="flex items-center justify-between text-xs text-sky-400 font-medium">
               <span>白/夜任务闭环与报表</span>
               <button onclick="toggleShiftMode()" id="btnToggleShift" class="text-[10px] px-2 py-0.5 rounded bg-sky-900/50 hover:bg-sky-800 text-sky-300 border border-sky-700/60 transition-colors">切换夜班</button>
+            </div>
+            <div class="flex flex-wrap items-center gap-1.5 mt-2">
+              <label for="shiftDatePicker" class="text-[10px] text-slate-400 flex items-center gap-1"><i class="ph ph-calendar-blank"></i> 回溯日期</label>
+              <input type="date" id="shiftDatePicker" onchange="handleShiftDateChange(this.value)" class="bg-slate-950 border border-slate-700 rounded px-2 py-1 text-xs font-mono text-sky-300 focus:outline-none focus:border-sky-500">
+              <select id="shiftTypePicker" onchange="handleShiftTypeChange(this.value)" class="bg-slate-950 border border-slate-700 rounded px-2 py-1 text-xs font-mono text-sky-300 focus:outline-none focus:border-sky-500">
+                <option value="白班">白班</option>
+                <option value="夜班">夜班</option>
+              </select>
+              <button id="btnBackToTodayShift" onclick="resetToTodayShift()" class="hidden px-2 py-1 rounded bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 text-xs font-semibold">返回今日当班</button>
+              <span id="shiftRecordVersionBadge" class="hidden px-1.5 py-0.5 rounded text-[10px] font-mono bg-amber-500/15 text-amber-300 border border-amber-500/40">v1</span>
             </div>
             <div class="grid grid-cols-2 gap-2 mt-2">
               <button onclick="triggerHandoverAction()" id="btnHandoverTrigger" class="w-full bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold py-2 px-2 rounded-lg flex items-center justify-center gap-1 border border-slate-700 shadow-sm transition-all disabled:opacity-50 disabled:cursor-not-allowed">
@@ -765,6 +778,11 @@
                     <!-- Populated dynamically via updateLogAuthorDropdown() -->
                   </select>
                 </div>
+              </div>
+
+              <div id="logOccurredAtWrap" class="hidden">
+                <label class="block text-slate-300 font-medium mb-1">补录业务时间 (历史台账)</label>
+                <input type="datetime-local" id="logOccurredAt" class="w-full bg-slate-900 border border-amber-600/50 rounded-lg p-2 text-amber-200 font-mono text-xs focus:outline-none focus:border-amber-500">
               </div>
 
               <button type="submit" id="btnSubmitLog" class="w-full bg-sky-600 hover:bg-sky-500 text-white font-medium py-2 px-4 rounded-lg flex items-center justify-center gap-1.5 shadow-md shadow-sky-600/20 transition-all disabled:opacity-50 disabled:cursor-not-allowed">
@@ -2390,6 +2408,75 @@
   </div>
 
   <!-- ======================================================== -->
+  <!-- MODAL: 管理员校正历史运行流水 -->
+  <!-- ======================================================== -->
+  <div id="modalEditShiftLog" class="fixed inset-0 bg-black/75 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
+    <div class="bg-[#0f172a] border border-amber-500/50 rounded-xl w-full max-w-lg shadow-2xl overflow-hidden">
+      <div class="p-4 bg-slate-900 border-b border-slate-800 flex items-center justify-between">
+        <div class="flex items-center gap-2">
+          <i class="ph ph-pencil-simple text-amber-400 text-lg"></i>
+          <div>
+            <h3 class="font-bold text-sm text-white" id="editShiftLogTitle">校正运行流水记录</h3>
+            <p class="text-[10px] text-slate-400">仅系统管理员可校正历史/已交接班次的台账内容</p>
+          </div>
+        </div>
+        <button onclick="closeEditShiftLogModal()" class="text-slate-400 hover:text-white"><i class="ph ph-x text-lg"></i></button>
+      </div>
+      <form onsubmit="submitEditShiftLog(event)" class="p-5 space-y-3 text-xs">
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block text-slate-400 mb-1">事件分类</label>
+            <select id="editLogCategory" class="w-full bg-slate-950 border border-slate-700 rounded-lg p-2 text-slate-200 focus:outline-none focus:border-amber-500">
+              <option value="运行报警">运行报警</option>
+              <option value="现场巡查">现场巡查</option>
+              <option value="待办琐事">待办琐事</option>
+              <option value="谱仪协助">谱仪协助</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-slate-400 mb-1">所属系统 / 谱仪</label>
+            <input type="text" id="editLogTarget" required class="w-full bg-slate-950 border border-slate-700 rounded-lg p-2 text-slate-200 focus:outline-none focus:border-amber-500">
+          </div>
+        </div>
+        <div>
+          <label class="block text-slate-400 mb-1">处置内容与现场征候</label>
+          <textarea id="editLogContent" rows="3" required class="w-full bg-slate-950 border border-slate-700 rounded-lg p-2 text-slate-200 focus:outline-none focus:border-amber-500"></textarea>
+        </div>
+        <div class="grid grid-cols-3 gap-3">
+          <div>
+            <label class="block text-slate-400 mb-1">严重等级</label>
+            <select id="editLogLevel" class="w-full bg-slate-950 border border-slate-700 rounded-lg p-2 text-slate-200 focus:outline-none focus:border-amber-500">
+              <option value="紧急">紧急</option>
+              <option value="重要">重要</option>
+              <option value="一般">一般</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-slate-400 mb-1">处置状态</label>
+            <select id="editLogStatus" class="w-full bg-slate-950 border border-slate-700 rounded-lg p-2 text-slate-200 focus:outline-none focus:border-amber-500">
+              <option value="待处理">待处理</option>
+              <option value="跟进中">跟进中</option>
+              <option value="已闭环">已闭环</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-slate-400 mb-1">记录人</label>
+            <input type="text" id="editLogAuthor" class="w-full bg-slate-950 border border-slate-700 rounded-lg p-2 text-slate-200 focus:outline-none focus:border-amber-500">
+          </div>
+        </div>
+        <div>
+          <label class="block text-slate-400 mb-1">业务时间 (YYYY-MM-DD HH:mm)</label>
+          <input type="datetime-local" id="editLogOccurredAt" class="w-full bg-slate-950 border border-slate-700 rounded-lg p-2 text-amber-200 font-mono focus:outline-none focus:border-amber-500">
+        </div>
+        <div class="flex justify-end gap-2 pt-1">
+          <button type="button" onclick="closeEditShiftLogModal()" class="px-3 py-1.5 rounded bg-slate-800 text-slate-300">取消</button>
+          <button type="submit" class="px-4 py-1.5 rounded bg-amber-600 hover:bg-amber-500 text-white font-semibold shadow-md shadow-amber-600/30">保存修订并提升版本</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- ======================================================== -->
   <!-- MODAL: 手动新增系统导航页面 -->
   <!-- ======================================================== -->
   <div id="modalAddNav" class="fixed inset-0 bg-black/75 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
@@ -2673,7 +2760,7 @@
       
       <!-- Report Title Header -->
       <div style="text-align: center; border-bottom: 2px solid #000; padding-bottom: 8px; margin-bottom: 12px;">
-        <h2 style="font-size: 21px; font-weight: bold; margin: 0; letter-spacing: 1.5px; color: #000;">靶站谱仪运行值班记录</h2>
+        <h2 id="pdfReportTitle" style="font-size: 21px; font-weight: bold; margin: 0; letter-spacing: 1.5px; color: #000;">靶站谱仪运行值班记录</h2>
         <div style="font-size: 12px; color: #444; margin-top: 3px; font-family: 'Inter', sans-serif;">Target Station & Spectrometer Daily Operations Duty Log</div>
       </div>
 
@@ -2756,6 +2843,7 @@
           <span><strong>审计防伪戳 (SHA-256)：</strong> <code id="pdfSecurityHash" style="font-family: monospace;">9A8F2C7104B28D7E6F1A90C4</code></span>
           <span><strong>生成时间：</strong> <span id="pdfExportTimestamp">2026-11-04 17:30:15</span></span>
         </div>
+        <div id="pdfRevisionTrace" class="hidden" style="border-top: 1px dashed #bbb; margin-top: 5px; padding-top: 5px; font-size: 10.5px; color: #900; font-weight: bold;"></div>
       </div>
 
     </div>
@@ -3083,6 +3171,8 @@
       applyAssistPermissions();
       renderAssistCategoryTabs();
       renderAssistTable();
+      renderShiftHistoryBanner();
+      applyShiftLockUI();
     }
 
     function switchRole(role) {
@@ -3260,11 +3350,8 @@
     }
 
     function updateShiftBannerTime() {
-      const now = new Date();
-      const Y = now.getFullYear();
-      const M = String(now.getMonth() + 1).padStart(2, '0');
-      const D = String(now.getDate()).padStart(2, '0');
-      const bannerDate = `${Y}年${M}月${D}日`;
+      const source = (typeof displayShiftDate === 'function') ? displayShiftDate() : todayIsoDate();
+      const bannerDate = formatShiftDate(source) || source;
       const shiftText = isDayShift ? '白班 (08:00 ~ 17:30)' : '夜班 (17:30 ~ 次日 08:00)';
       setSafeText('bannerShiftName', `${bannerDate} · ${shiftText}`);
     }
@@ -3968,6 +4055,11 @@
         showToast('⚠️ 权限拦截：当前为只读观察员，无权切换班次配置！');
         return;
       }
+      if (isHistoricalOrLocked()) {
+        if (!guardHistoricalWrite()) return;
+        showToast('⚠️ 历史台账不支持翻转班型，请使用日期 / 班次选择器查阅目标班次。');
+        return;
+      }
       if (!apiReady || !currentShift) {
         showToast('⚠️ 当班数据尚未加载，请稍后重试');
         return;
@@ -4021,7 +4113,24 @@
         showToast('⚠️ 权限拦截：只读人员不可更改束流打靶模式！');
         return;
       }
+      if (!guardHistoricalWrite()) return;
       const mode = document.getElementById('beamModeSelect').value;
+      if (apiReady && isHistoricalOrLocked()) {
+        apiRequest('/shift-records/revise', {
+          method: 'POST',
+          body: {
+            shift_date: viewingDate,
+            shift_type: viewingShiftLabel,
+            beam_mode: mode === '供束打靶' ? '加速器 200kW, 25Hz 供束打靶，谱仪正常实验' : '停机维护，无束流'
+          }
+        }).then(record => {
+          if (record) currentShiftRecord = { ...(currentShiftRecord || {}), ...record, is_locked: true, is_today: false };
+          applyBeamModeBadge(mode);
+          renderShiftHistoryBanner();
+          showToast(`历史台账工况已修订为：${mode}，当前版本 v${shiftRevisionVersion()}`);
+        }).catch(err => showToast(`⚠️ ${err.message}`));
+        return;
+      }
       if (apiReady && currentShift) {
         apiRequest(`/api/v1/shifts/${currentShift.id}`, {
           method: 'PATCH',
@@ -4071,6 +4180,7 @@
         showToast('⚠️ 权限拦截：只读人员不可修改岗位配置！');
         return;
       }
+      if (!guardHistoricalWrite()) return;
       const leaderSel = document.getElementById('leaderSelect');
       const opSel = document.getElementById('operatorSelect');
       const studentInp = document.getElementById('studentInput');
@@ -4083,6 +4193,21 @@
 
       if (leader === op) {
         showToast('⚠️ 警告：值班长与值班员不能为同一人，请落实双人责任互锁！');
+      } else if (apiReady && isHistoricalOrLocked()) {
+        apiRequest('/shift-records/revise', {
+          method: 'POST',
+          body: {
+            shift_date: viewingDate,
+            shift_type: viewingShiftLabel,
+            shift_leader: leader,
+            shift_operator: op,
+            shift_student: student
+          }
+        }).then(record => {
+          if (record) currentShiftRecord = { ...(currentShiftRecord || {}), ...record, is_locked: true, is_today: false };
+          renderShiftHistoryBanner();
+          showToast(`历史台账岗位配置已修订（值班长 [${leader}] | 值班员 [${op}]），当前版本 v${shiftRevisionVersion()}`);
+        }).catch(err => showToast(`⚠️ ${err.message}`));
       } else if (apiReady && currentShift) {
         apiRequest(`/api/v1/shifts/${currentShift.id}`, {
           method: 'PATCH',
@@ -4288,7 +4413,8 @@
 
       let completedCount = 0;
       const staffList = getDutyStaffList();
-      const isViewer = (currentUser.role === 'viewer');
+      const shiftLocked = isShiftWriteLocked();
+      const isViewer = (currentUser.role === 'viewer') || shiftLocked;
 
       patrolSlots.forEach(slot => {
         const isChecked = slot.status === 'checked';
@@ -4343,7 +4469,7 @@
                 </div>
               ` : `
                 <div class="py-1 text-center rounded bg-slate-950 border border-slate-800 text-[10px] text-slate-400 font-mono">
-                  👁️ 只读模式（仅供查阅）
+                  ${shiftLocked ? '🔒 历史记录仅管理员可补录' : '👁️ 只读模式（仅供查阅）'}
                 </div>
               `}
             ` : `
@@ -4402,6 +4528,10 @@
     let activeAnomalyChecker = null;
 
     function openPatrolAnomalyModal(slotId, slotTime) {
+      if (isShiftWriteLocked()) {
+        showToast(HISTORICAL_GUARD_TOAST);
+        return;
+      }
       if (currentUser.role === 'viewer') {
         showToast('⚠️ 权限拦截：只读人员不可上报异常！');
         return;
@@ -4785,8 +4915,13 @@
     // ==========================================
     function exportShiftPDF() {
       const now = new Date();
-      const dateStr = now.toLocaleDateString('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit' }).replace(/\//g, '-');
       const timeStr = now.toLocaleTimeString('zh-CN');
+      // 导出日期与班次以当前查看的台账为准（历史回溯时不得误用“今天”）
+      const exportDate = displayShiftDate();
+      const dateStr = exportDate;
+      const shiftLabel = viewingShiftLabel || (isDayShift ? '白班' : '夜班');
+      const revisionVersion = shiftRevisionVersion();
+      const isRevised = revisionVersion > 1;
 
       const leader = document.getElementById('leaderSelect').value;
       const op = document.getElementById('operatorSelect').value;
@@ -4794,8 +4929,25 @@
       const student = (studentInp && studentInp.value.trim()) ? studentInp.value.trim() : currentStudent;
       const mode = document.getElementById('beamModeSelect').value;
 
-      document.getElementById('pdfDate').innerText = `${dateStr} (星期三)`;
-      document.getElementById('pdfShiftName').innerText = isDayShift ? "白班 (08:00 ~ 17:30)" : "夜班 (17:30 ~ 次日 08:00)";
+      const weekday = ['星期日','星期一','星期二','星期三','星期四','星期五','星期六'][new Date(`${exportDate}T00:00:00`).getDay()];
+      document.getElementById('pdfDate').innerText = `${formatShiftDate(exportDate) || exportDate}${Number.isNaN(new Date(`${exportDate}T00:00:00`).getTime()) ? '' : ` (${weekday})`}`;
+      document.getElementById('pdfShiftName').innerText = shiftLabel === '夜班' ? "夜班 (17:30 ~ 次日 08:00)" : "白班 (08:00 ~ 17:30)";
+      const reportTitleEl = document.getElementById('pdfReportTitle');
+      if (reportTitleEl) {
+        reportTitleEl.innerText = isRevised
+          ? `靶站谱仪运行值班记录（修订版 v${revisionVersion}）`
+          : '靶站谱仪运行值班记录';
+      }
+      const revisionTrace = document.getElementById('pdfRevisionTrace');
+      if (revisionTrace) {
+        if (isRevised) {
+          revisionTrace.classList.remove('hidden');
+          revisionTrace.innerText = `修订留痕：由系统管理员 [${currentShiftRecord?.last_revised_by || '未记录'}] 于 ${currentShiftRecord?.last_revised_at || '未记录'} 修订更正（当前第 v${revisionVersion} 版）`;
+        } else {
+          revisionTrace.classList.add('hidden');
+          revisionTrace.innerText = '';
+        }
+      }
       document.getElementById('pdfLeader').innerText = leader;
       document.getElementById('pdfOperator').innerText = `${op} (坐班: ${student})`;
       document.getElementById('pdfMode').innerText = mode === '供束打靶' ? "加速器 200kW, 25Hz 供束打靶，谱仪正常实验" : "停机维护，无束流";
@@ -4845,7 +4997,7 @@
 
       const printWrapper = document.getElementById('pdfPrintWrapper');
       const element = document.getElementById('printableShiftReport');
-      const reportBaseName = `靶站谱仪运行值班记录_${dateStr}_${isDayShift ? '白班' : '夜班'}`;
+      const reportBaseName = `靶站谱仪运行值班记录_${dateStr}_${shiftLabel}${isRevised ? `_修订版v${revisionVersion}` : ''}`;
 
       printWrapper.style.display = 'block';
 
@@ -4901,7 +5053,9 @@
       tbody.innerHTML = '';
 
       const filter = document.getElementById('logFilterType') ? document.getElementById('logFilterType').value : 'ALL';
-      const isViewer = (currentUser.role === 'viewer');
+      const shiftLocked = isShiftWriteLocked();
+      const isViewer = (currentUser.role === 'viewer') || shiftLocked;
+      const canEdit = (currentUser.role === 'admin');
 
       const filtered = shiftLogs.filter(log => {
         if (filter === 'ALL') return true;
@@ -4942,13 +5096,18 @@
             </span>
           </td>
           <td class="py-2.5 px-3 text-slate-400">${log.author}</td>
-          <td class="py-2.5 px-3 text-right">
+          <td class="py-2.5 px-3 text-right whitespace-nowrap">
             ${!isViewer ? `
               <button onclick="toggleLogStatus(${log.id})" class="text-[11px] px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 text-sky-400 transition-colors">
                 ${log.status === '已闭环' ? '重新激活' : '闭环标记'}
               </button>
+              ${canEdit ? `
+                <button onclick="openEditShiftLogModal(${log.id})" class="ml-1 text-[11px] px-2 py-1 rounded bg-amber-500/15 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 transition-colors" title="管理员校正该条流水">
+                  <i class="ph ph-pencil-simple"></i> 修改
+                </button>
+              ` : ''}
             ` : `
-              <span class="text-[11px] text-slate-600">只读</span>
+              <span class="text-[11px] text-slate-600" title="${shiftLocked ? '历史值班记录及已交接班次仅允许系统管理员修改' : '只读观察员'}"><i class="ph ph-lock-simple"></i> ${shiftLocked ? '历史只读' : '只读'}</span>
             `}
           </td>
         `;
@@ -6628,13 +6787,328 @@
       if (dot) dot.className = `w-2.5 h-2.5 rounded-full ${online ? 'bg-emerald-400 animate-pulse' : 'bg-amber-400'}`;
     }
 
+    // ==========================================
+    // 历史班次回溯 · 修订版本与 RBAC 只读锁定
+    // ==========================================
+    let viewingDate = '';
+    let viewingShiftLabel = '';
+    let isViewingToday = true;
+    let currentShiftRecord = null;
+    const HISTORICAL_GUARD_TOAST = '⚠️ 权限拦截：历史值班记录及已交接班次仅允许系统管理员 (Admin) 修改！';
+
+    function todayIsoDate() {
+      const now = new Date();
+      return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+    }
+
+    function displayShiftDate() {
+      if (isViewingToday) return todayIsoDate();
+      return viewingDate || (currentShift ? currentShift.shift_date : todayIsoDate());
+    }
+
+    function isHistoricalOrLocked() {
+      if (currentShiftRecord && currentShiftRecord.is_locked !== undefined) {
+        return Boolean(currentShiftRecord.is_locked);
+      }
+      const dateStr = viewingDate || (currentShift ? currentShift.shift_date : todayIsoDate());
+      return dateStr < todayIsoDate();
+    }
+
+    function isShiftWriteLocked() {
+      return isHistoricalOrLocked() && currentUser.role !== 'admin';
+    }
+
+    function guardHistoricalWrite() {
+      if (!isShiftWriteLocked()) return true;
+      showToast(HISTORICAL_GUARD_TOAST);
+      return false;
+    }
+
+    function shiftRevisionVersion() {
+      return Number((currentShiftRecord && currentShiftRecord.revision_version) || 1);
+    }
+
+    function renderShiftHistoryBanner() {
+      const banner = document.getElementById('shiftHistoryBanner');
+      const versionBadge = document.getElementById('shiftRecordVersionBadge');
+      const backBtn = document.getElementById('btnBackToTodayShift');
+      const version = shiftRevisionVersion();
+      if (versionBadge) {
+        versionBadge.classList.toggle('hidden', version <= 1);
+        versionBadge.innerText = `修订版 v${version}`;
+      }
+      if (backBtn) backBtn.classList.toggle('hidden', isViewingToday);
+      if (!banner) return;
+
+      if (!isHistoricalOrLocked() && version <= 1) {
+        banner.className = 'hidden rounded-xl p-3 items-center justify-between gap-3';
+        banner.innerHTML = '';
+        return;
+      }
+
+      const shiftText = viewingShiftLabel || (isDayShift ? '白班' : '夜班');
+      const target = `【${viewingDate} · ${shiftText}】`;
+      const trace = (currentShiftRecord && currentShiftRecord.last_revised_by)
+        ? `<span class="text-[10px] text-slate-400 font-mono">最近修订：${currentShiftRecord.last_revised_by} · ${currentShiftRecord.last_revised_at || ''}</span>`
+        : '';
+      const emptyHint = (currentShiftRecord && currentShiftRecord.is_empty)
+        ? '<span class="text-[10px] text-slate-400 font-mono">该日期暂无台账，管理员可补录建档</span>'
+        : '';
+
+      if (isHistoricalOrLocked() && currentUser.role === 'admin') {
+        banner.className = 'rounded-xl p-3 flex flex-col md:flex-row md:items-center md:justify-between gap-2 bg-amber-950/40 border border-amber-500/50';
+        banner.innerHTML = `
+          <div class="flex items-start gap-2.5 text-xs text-amber-200">
+            <i class="ph ph-crown-simple text-amber-400 text-lg shrink-0"></i>
+            <span>👑 管理员历史台账修订模式：正在查看 ${target} 记录（当前版本：v${version}）。您拥有管理员修订权限，修改或补录后导出 PDF 将自动标注修订版本！</span>
+          </div>
+          <div class="flex items-center gap-2 shrink-0">${trace}${emptyHint}</div>`;
+      } else if (isHistoricalOrLocked()) {
+        banner.className = 'rounded-xl p-3 flex flex-col md:flex-row md:items-center md:justify-between gap-2 bg-slate-800/60 border border-slate-600/60';
+        banner.innerHTML = `
+          <div class="flex items-start gap-2.5 text-xs text-slate-300">
+            <i class="ph ph-lock-key text-slate-400 text-lg shrink-0"></i>
+            <span>🔒 历史台账只读存档：正在查看 ${target} 记录（当前版本：v${version}）。为保障运行台账严肃性，历史及已交接记录仅限系统管理员修改，您当前仅可查阅或导出 PDF。</span>
+          </div>
+          <div class="flex items-center gap-2 shrink-0">${trace}${emptyHint}</div>`;
+      } else {
+        banner.className = 'rounded-xl p-3 flex items-center justify-between gap-2 bg-amber-950/30 border border-amber-500/40';
+        banner.innerHTML = `
+          <div class="flex items-center gap-2.5 text-xs text-amber-200">
+            <i class="ph ph-seal-check text-amber-400 text-lg"></i>
+            <span>本班台账已由系统管理员修订至 v${version} 版本，导出 PDF 将自动标注修订溯源信息。</span>
+          </div>
+          <div class="flex items-center gap-2 shrink-0">${trace}</div>`;
+      }
+    }
+
+    function applyShiftLockUI() {
+      const locked = isShiftWriteLocked();
+      const adminHistorical = isHistoricalOrLocked() && currentUser.role === 'admin';
+
+      const beamModeSel = document.getElementById('beamModeSelect');
+      const leaderSel = document.getElementById('leaderSelect');
+      const opSel = document.getElementById('operatorSelect');
+      const studentInp = document.getElementById('studentInput');
+      const toggleBtn = document.getElementById('btnToggleShift');
+      const handoverBtn = document.getElementById('btnHandoverTrigger');
+      const datePicker = document.getElementById('shiftDatePicker');
+      const typePicker = document.getElementById('shiftTypePicker');
+
+      if (datePicker) {
+        datePicker.max = todayIsoDate();
+        datePicker.value = displayShiftDate();
+      }
+      if (typePicker) {
+        typePicker.value = viewingShiftLabel || (isDayShift ? '白班' : '夜班');
+        // 今日当班班次由系统活动班次自动判定，避免与真实在岗批次不一致
+        typePicker.disabled = isViewingToday;
+        typePicker.title = isViewingToday ? '今日当班班次由系统在岗批次自动判定' : '';
+        typePicker.classList.toggle('opacity-60', isViewingToday);
+      }
+
+      [leaderSel, opSel, studentInp, beamModeSel].forEach(el => {
+        if (!el) return;
+        if (locked) {
+          el.disabled = true;
+          el.title = '历史记录仅管理员可补录';
+        } else {
+          el.disabled = (currentUser.role === 'viewer');
+          el.title = '';
+        }
+      });
+
+      [toggleBtn, handoverBtn].forEach(el => {
+        if (!el) return;
+        const disabled = locked || currentUser.role === 'viewer';
+        el.disabled = disabled;
+        el.classList.toggle('opacity-45', disabled);
+        el.classList.toggle('cursor-not-allowed', disabled);
+        el.title = locked ? '历史记录仅管理员可补录' : '';
+      });
+
+      const logFields = ['logCategory', 'logTarget', 'logContent', 'logStatus', 'logAuthorSelect'];
+      logFields.forEach(id => {
+        const el = document.getElementById(id);
+        if (!el) return;
+        el.disabled = locked || currentUser.role === 'viewer';
+      });
+      const submitBtn = document.getElementById('btnSubmitLog');
+      if (submitBtn) {
+        const disabled = locked || currentUser.role === 'viewer';
+        submitBtn.disabled = disabled;
+        const text = document.getElementById('btnSubmitLogText');
+        if (text) {
+          text.innerText = locked
+            ? '历史记录仅管理员可补录'
+            : (currentUser.role === 'viewer' ? '只读模式 (需值班员权限录入)' : '确认录入运行值班日志');
+        }
+        const tag = document.getElementById('quickLogRoleTag');
+        if (tag) {
+          if (locked) {
+            tag.innerText = '历史只读';
+            tag.className = 'text-[10px] font-mono px-1.5 py-0.5 rounded bg-slate-800 text-slate-400 border border-slate-700';
+          } else {
+            tag.innerText = currentUser.role === 'viewer' ? '只读锁定' : (adminHistorical ? '管理员补录' : '允许录入');
+            tag.className = currentUser.role === 'viewer'
+              ? 'text-[10px] font-mono px-1.5 py-0.5 rounded bg-slate-800 text-slate-400 border border-slate-700'
+              : 'text-[10px] font-mono px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/30';
+          }
+        }
+      }
+
+      const occurredWrap = document.getElementById('logOccurredAtWrap');
+      if (occurredWrap) occurredWrap.classList.toggle('hidden', !adminHistorical);
+      if (adminHistorical) {
+        const input = document.getElementById('logOccurredAt');
+        const targetDate = displayShiftDate();
+        if (input && (!input.value || input.value.slice(0, 10) !== targetDate)) {
+          input.value = `${targetDate}T${isDayShift ? '09:00' : '22:30'}`;
+        }
+      }
+    }
+
+    function applyShiftSnapshot(record, duty, slots, logs) {
+      currentShiftRecord = record || null;
+      viewingDate = (record && record.shift_date) || viewingDate;
+      viewingShiftLabel = (record && record.shift_type) || viewingShiftLabel;
+      isViewingToday = Boolean(record && record.is_today);
+      if (duty) {
+        isDayShift = duty.shift_type === 'day';
+      } else {
+        isDayShift = viewingShiftLabel !== '夜班';
+      }
+
+      patrolSlots = slots || [];
+      shiftLogs = (logs || []).map(log => ({ ...log, time: normalizeLogTime(log.time, log.occurred_at) }));
+
+      const leaderSel = document.getElementById('leaderSelect');
+      const opSel = document.getElementById('operatorSelect');
+      const studentInp = document.getElementById('studentInput');
+      const modeSel = document.getElementById('beamModeSelect');
+      if (leaderSel) leaderSel.value = record.shift_leader || '';
+      if (opSel) opSel.value = record.shift_operator || '';
+      if (studentInp) studentInp.value = record.shift_student || '';
+      if (modeSel) {
+        modeSel.value = (record.beam_mode || '').includes('停机') ? '停机维护' : '供束打靶';
+        applyBeamModeBadge(modeSel.value);
+      }
+      currentStudent = record.shift_student || currentStudent;
+
+      const datePicker = document.getElementById('shiftDatePicker');
+      const typePicker = document.getElementById('shiftTypePicker');
+      if (datePicker) datePicker.value = displayShiftDate();
+      if (typePicker) typePicker.value = viewingShiftLabel;
+
+      const dateText = formatShiftDate(displayShiftDate());
+      const shiftText = isDayShift ? '白班 (08:00 ~ 17:30)' : '夜班 (17:30 ~ 次日 08:00)';
+      setSafeText('bannerShiftName', `${dateText} · ${shiftText}`);
+      setSafeText('topShiftTitle', `${dateText} ${shiftText}`);
+      setSafeText('statPatrolLabel', isDayShift ? '白班巡查 (共3次)' : '夜班巡查 (共5次)');
+      const toggleButton = document.getElementById('btnToggleShift');
+      if (toggleButton) toggleButton.innerText = isDayShift ? '切换夜班' : '切换白班';
+      updatePersonnelDisplay();
+
+      renderPatrolSlots();
+      renderShiftLogs();
+      renderTodos();
+      renderShiftHistoryBanner();
+      applyShiftLockUI();
+    }
+
+    async function loadShiftSnapshot(dateStr, label) {
+      try {
+        const data = await apiRequest(`/shift-data?date=${encodeURIComponent(dateStr)}&shift=${encodeURIComponent(label)}`);
+        applyShiftSnapshot(data.record, data.duty_shift, data.patrol_slots, data.logs);
+        return true;
+      } catch (error) {
+        showToast(`⚠️ ${error.message}`);
+        return false;
+      }
+    }
+
+    async function handleShiftDateChange(value) {
+      if (!value) return;
+      if (value === todayIsoDate()) {
+        viewingDate = value;
+        viewingShiftLabel = '';
+        await resetToTodayShift(true);
+        showToast('已切换回今日当班台账');
+        return;
+      }
+      const label = document.getElementById('shiftTypePicker') ? document.getElementById('shiftTypePicker').value : viewingShiftLabel || '白班';
+      viewingDate = value;
+      viewingShiftLabel = label;
+      const ok = await loadShiftSnapshot(value, label);
+      if (ok) {
+        const empty = currentShiftRecord && currentShiftRecord.is_empty;
+        showToast(empty ? `${value} · ${label} 暂无台账记录（管理员可补录建档）` : `已切换到 ${value} · ${label} 值班台账`);
+        return;
+      }
+      // 接口异常时才回退到今日当班
+      await resetToTodayShift(true);
+    }
+
+    async function handleShiftTypeChange(value) {
+      if (isViewingToday) return;
+      const dateStr = document.getElementById('shiftDatePicker') ? document.getElementById('shiftDatePicker').value : viewingDate;
+      if (!dateStr) return;
+      const ok = await loadShiftSnapshot(dateStr, value);
+      if (ok) showToast(`已切换到 ${dateStr} · ${value} 值班台账`);
+    }
+
+    async function resetToTodayShift(silent) {
+      const datePicker = document.getElementById('shiftDatePicker');
+      const typePicker = document.getElementById('shiftTypePicker');
+      if (datePicker) datePicker.value = '';
+      viewingDate = '';
+      try {
+        await refreshAllData();
+        if (typePicker) typePicker.value = isDayShift ? '白班' : '夜班';
+        if (!silent) showToast('已返回今日当班台账');
+      } catch (error) {
+        showToast(`⚠️ ${error.message}`);
+      }
+    }
+
+    async function reloadShiftView() {
+      if (viewingDate && !isViewingToday) {
+        await loadShiftSnapshot(viewingDate, viewingShiftLabel);
+        return;
+      }
+      await refreshAllData();
+    }
+
     function hydrateFromBootstrap(data) {
-      patrolSlots = data.patrol_slots || [];
+      const keepHistoryView = (isViewingToday === false && !!viewingDate);
+      const record = data.shift_record || (data.shift ? {
+        shift_date: data.shift.shift_date,
+        shift_type: data.shift.shift_label || (data.shift.shift_type === 'day' ? '白班' : '夜班'),
+        shift_leader: data.shift.leader_name,
+        shift_operator: data.shift.operator_name,
+        shift_student: data.shift.student_name,
+        beam_mode: data.shift.beam_mode,
+        is_handed_over: data.shift.is_handed_over,
+        revision_version: data.shift.revision_version,
+        last_revised_by: data.shift.last_revised_by,
+        last_revised_at: data.shift.last_revised_at,
+        is_locked: false,
+        is_today: true
+      } : null);
+      if (!keepHistoryView) {
+        currentShiftRecord = record;
+        if (record) {
+          viewingDate = record.shift_date;
+          viewingShiftLabel = record.shift_type;
+          isViewingToday = record.is_today !== false;
+        }
+        patrolSlots = data.patrol_slots || [];
+        shiftLogs = (data.logs || []).map(log => ({
+          ...log,
+          time: normalizeLogTime(log.time, log.occurred_at)
+        }));
+      }
       shiftTodos = data.todos || [];
-      shiftLogs = (data.logs || []).map(log => ({
-        ...log,
-        time: normalizeLogTime(log.time, log.occurred_at)
-      }));
       eventsData = data.events || [];
       navList = data.nav_items || [];
       if (data.forecast) {
@@ -6646,7 +7120,16 @@
         };
         currentForecast = data.forecast;
       }
-      updateShiftChrome(data.shift);
+      if (keepHistoryView) {
+        // 处于历史回溯视图时，不能被活动班次覆盖正在查阅的历史台账
+        currentShift = data.shift || currentShift;
+        applyShiftSnapshot(currentShiftRecord, null, patrolSlots, shiftLogs);
+      } else {
+        updateShiftChrome(data.shift);
+        if (record && record.is_today === false) {
+          applyShiftSnapshot(record, null, patrolSlots, shiftLogs);
+        }
+      }
       applySessionUser(currentUser);
     }
 
@@ -6795,6 +7278,7 @@
     }
 
     checkInNormal = async function (slotId) {
+      if (isShiftWriteLocked()) return showToast(HISTORICAL_GUARD_TOAST);
       if (currentUser.role === 'viewer') return showToast('⚠️ 权限拦截：只读人员不可执行巡检打卡！');
       if (!requireApiWrite()) return;
       const slot = patrolSlots.find(item => String(item.id) === String(slotId));
@@ -6813,6 +7297,7 @@
     };
 
     submitPatrolAnomaly = async function () {
+      if (isShiftWriteLocked()) return showToast(HISTORICAL_GUARD_TOAST);
       const content = document.getElementById('anomalyContent').value.trim();
       if (!content) return showToast('请输入巡查发现的异常描述！');
       const checker = activeAnomalyChecker || document.getElementById('operatorSelect')?.value || currentUser.name;
@@ -6830,6 +7315,7 @@
     };
 
     resetPatrolSlot = async function (slotId) {
+      if (isShiftWriteLocked()) return showToast(HISTORICAL_GUARD_TOAST);
       if (currentUser.role === 'viewer') return showToast('⚠️ 权限拦截：只读人员不可重置打卡！');
       try {
         await apiRequest(`/patrol-slots/${slotId}/reset`, { method: 'POST' });
@@ -6841,6 +7327,7 @@
     };
 
     insertQuickTag = async function (tagText) {
+      if (isShiftWriteLocked()) return showToast(HISTORICAL_GUARD_TOAST);
       if (currentUser.role === 'viewer') return showToast('⚠️ 权限拦截：只读人员不可插入标签打卡！');
       const pending = patrolSlots.find(item => item.status === 'pending');
       if (!pending) {
@@ -6904,8 +7391,10 @@
 
     handleLogSubmit = async function (event) {
       event.preventDefault();
+      if (isShiftWriteLocked()) return showToast(HISTORICAL_GUARD_TOAST);
       if (currentUser.role === 'viewer') return showToast('⚠️ 权限拦截：只读人员不可录入值班日志！');
       const selectedLevel = document.querySelector('input[name="logLevel"]:checked');
+      const historical = isHistoricalOrLocked();
       try {
         await apiRequest('/shift-logs', {
           method: 'POST',
@@ -6915,25 +7404,92 @@
             content: document.getElementById('logContent').value.trim(),
             severity: selectedLevel ? selectedLevel.value : '一般',
             status: document.getElementById('logStatus').value,
-            author_name: document.getElementById('logAuthorSelect').value
+            author_name: document.getElementById('logAuthorSelect').value,
+            shift_date: historical ? viewingDate : undefined,
+            shift_type: historical ? viewingShiftLabel : undefined,
+            occurred_at: historical ? (document.getElementById('logOccurredAt')?.value || undefined) : undefined
           }
         });
         document.getElementById('logContent').value = '';
-        await refreshAllData();
-        showToast('运行日志已成功录入并持久化');
+        if (historical) {
+          await loadShiftSnapshot(viewingDate, viewingShiftLabel);
+        } else {
+          await refreshAllData();
+        }
+        showToast(historical ? `历史台账流水已补录，修订版本更新为 v${shiftRevisionVersion()}` : '运行日志已成功录入并持久化');
       } catch (error) {
         showToast(`⚠️ ${error.message}`);
       }
     };
 
     toggleLogStatus = async function (id) {
+      if (isShiftWriteLocked()) return showToast(HISTORICAL_GUARD_TOAST);
       if (currentUser.role === 'viewer') return showToast('⚠️ 权限拦截：只读人员不可翻转工单状态！');
       const log = shiftLogs.find(item => String(item.id) === String(id));
       if (!log) return;
       try {
         await apiRequest(`/shift-logs/${id}`, { method: 'PATCH', body: { status: log.status === '已闭环' ? '跟进中' : '已闭环' } });
-        await refreshAllData();
+        await reloadShiftView();
         showToast('记录状态已更新');
+      } catch (error) {
+        showToast(`⚠️ ${error.message}`);
+      }
+    };
+
+    let editingShiftLogId = null;
+
+    openEditShiftLogModal = function (id) {
+      if (currentUser.role !== 'admin') {
+        showToast('⚠️ 权限拦截：仅系统管理员可校正台账流水内容！');
+        return;
+      }
+      const log = shiftLogs.find(item => String(item.id) === String(id));
+      if (!log) return showToast('⚠️ 未找到该条流水记录');
+      editingShiftLogId = log.id;
+      setSafeText('editShiftLogTitle', `校正运行流水记录 (ID #${log.id})`);
+      const category = document.getElementById('editLogCategory');
+      const target = document.getElementById('editLogTarget');
+      const content = document.getElementById('editLogContent');
+      const level = document.getElementById('editLogLevel');
+      const status = document.getElementById('editLogStatus');
+      const author = document.getElementById('editLogAuthor');
+      const occurredAt = document.getElementById('editLogOccurredAt');
+      if (category) category.value = log.category || '运行报警';
+      if (target) target.value = log.target || '';
+      if (content) content.value = log.content || '';
+      if (level) level.value = log.level || '一般';
+      if (status) status.value = log.status || '待处理';
+      if (author) author.value = log.author || '';
+      if (occurredAt) occurredAt.value = (log.occurred_at || '').slice(0, 16);
+      document.getElementById('modalEditShiftLog').classList.remove('hidden');
+    };
+
+    function closeEditShiftLogModal() {
+      document.getElementById('modalEditShiftLog').classList.add('hidden');
+      editingShiftLogId = null;
+    }
+
+    submitEditShiftLog = async function (event) {
+      event.preventDefault();
+      if (currentUser.role !== 'admin') return showToast('⚠️ 权限拦截：仅系统管理员可校正台账流水内容！');
+      if (editingShiftLogId == null) return;
+      const occurredAt = document.getElementById('editLogOccurredAt').value;
+      try {
+        await apiRequest(`/shift-logs/${editingShiftLogId}`, {
+          method: 'PUT',
+          body: {
+            category: document.getElementById('editLogCategory').value,
+            target: document.getElementById('editLogTarget').value.trim(),
+            content: document.getElementById('editLogContent').value.trim(),
+            severity: document.getElementById('editLogLevel').value,
+            status: document.getElementById('editLogStatus').value,
+            author_name: document.getElementById('editLogAuthor').value.trim(),
+            occurred_at: occurredAt ? occurredAt.replace('T', ' ') : undefined
+          }
+        });
+        closeEditShiftLogModal();
+        await reloadShiftView();
+        showToast(`✅ 流水已校正，台账版本提升至 v${shiftRevisionVersion()}`);
       } catch (error) {
         showToast(`⚠️ ${error.message}`);
       }
@@ -6941,7 +7497,7 @@
 
     refreshLogs = async function () {
       try {
-        await refreshAllData();
+        await reloadShiftView();
         showToast('已从服务器同步最新运行流水');
       } catch (error) {
         showToast(`⚠️ ${error.message}`);
@@ -7070,8 +7626,13 @@
       document.getElementById('modalUserAuth').classList.remove('hidden');
     };
 
-    switchRole = function () {
-      showToast('⚠️ 角色由服务端账号决定，请退出后使用对应账号登录');
+    switchRole = function (role) {
+      const selector = document.getElementById('roleSwitcherSelect');
+      if (selector) selector.value = currentUser.role;
+      showToast(role && role !== currentUser.role
+        ? '⚠️ 角色由服务端账号决定，请退出后使用对应账号登录'
+        : '当前角色已生效');
+      applyRolePermissions(currentUser.role);
     };
 
     handleRegisterUser = async function (event) {
@@ -7289,6 +7850,7 @@
 
     triggerHandoverAction = function () {
       if (currentUser.role === 'viewer') return showToast('⚠️ 权限拦截：只读观察员无权签署交接班！请以值班长身份操作。');
+      if (!guardHistoricalWrite()) return;
       openHandoverModal();
     };
 

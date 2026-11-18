@@ -35,6 +35,7 @@ from models import (
     EpicsAlarmPV,
     ShiftHandover,
     ShiftLog,
+    ShiftRecord,
     ShiftTodo,
     SopExecution,
     User,
@@ -169,6 +170,48 @@ def ensure_shift_todo_columns(db: Session) -> None:
     db.commit()
 
     recalibrate_todo_timestamps(db)
+
+
+def ensure_shift_history_schema(db: Session) -> None:
+    """为既有库补齐班次历史台账字段，并把历史班次回填进 shift_records。"""
+    log_columns = {column["name"] for column in inspect(engine).get_columns("shift_logs")}
+    if "shift_date" not in log_columns:
+        db.execute(text("ALTER TABLE shift_logs ADD COLUMN shift_date VARCHAR(20)"))
+        db.execute(text("CREATE INDEX IF NOT EXISTS ix_shift_logs_shift_date ON shift_logs (shift_date)"))
+        db.commit()
+    if "shift_type" not in log_columns:
+        db.execute(text("ALTER TABLE shift_logs ADD COLUMN shift_type VARCHAR(10)"))
+        db.execute(text("CREATE INDEX IF NOT EXISTS ix_shift_logs_shift_type ON shift_logs (shift_type)"))
+        db.commit()
+
+    # 老流水若缺少日期/班次，从所属班次与其发生时间戳推导补全
+    db.execute(
+        text(
+            "UPDATE shift_logs SET shift_date = COALESCE("
+            "(SELECT d.shift_date FROM duty_shifts d WHERE d.id = shift_logs.shift_id), substr(occurred_at, 1, 10))"
+            " WHERE shift_date IS NULL OR shift_date = ''"
+        )
+    )
+    db.execute(
+        text(
+            "UPDATE shift_logs SET shift_type = COALESCE("
+            "(SELECT CASE d.shift_type WHEN 'night' THEN '夜班' ELSE '白班' END FROM duty_shifts d WHERE d.id = shift_logs.shift_id), '白班')"
+            " WHERE shift_type IS NULL OR shift_type = ''"
+        )
+    )
+    db.commit()
+
+    # 把已存在的班次同步进主档案，已归档的交接班次保留 is_handed_over 标记
+    shifts = db.scalars(select(DutyShift).order_by(DutyShift.id)).all()
+    for shift in shifts:
+        handed_over = db.scalar(select(ShiftHandover).where(ShiftHandover.shift_id == shift.id)) is not None
+        record = sync_shift_record(db, shift, handover=handed_over)
+        if shift.leader_name or shift.operator_name:
+            record.shift_leader = shift.leader_name or record.shift_leader
+            record.shift_operator = shift.operator_name or record.shift_operator
+            record.shift_student = shift.student_name or record.shift_student
+            record.beam_mode = shift.beam_mode or record.beam_mode
+    db.commit()
 
 
 def recalibrate_todo_timestamps(db: Session) -> None:
@@ -495,6 +538,8 @@ async def lifespan(_app: FastAPI):
         ensure_assist_param_column(db)
         ensure_shift_todo_columns(db)
         seed_database(db)
+        # 种子数据落库后再回填班次主档案，确保首启时历史班次同样具备 shift_records 元数据
+        ensure_shift_history_schema(db)
         if db.scalar(select(EpicsAlarmPV).limit(1)) is None:
             try:
                 from scripts.import_pv_alarms import import_pv_alarms
@@ -579,10 +624,36 @@ class LogCreatePayload(BaseModel):
     severity: Literal["紧急", "重要", "一般"] = "一般"
     status: Literal["待处理", "跟进中", "已闭环"] = "待处理"
     author_name: Optional[str] = Field(default=None, max_length=80)
+    shift_date: Optional[str] = Field(default=None, max_length=20)
+    shift_type: Optional[str] = Field(default=None, max_length=10)
+    occurred_at: Optional[str] = Field(default=None, max_length=20)
 
 
 class LogStatusPayload(BaseModel):
     status: Literal["待处理", "跟进中", "已闭环"]
+
+
+class LogUpdatePayload(BaseModel):
+    """单条运行流水的管理员更正载荷（历史台账补录/修订）。"""
+
+    category: Optional[str] = Field(default=None, min_length=1, max_length=30)
+    target: Optional[str] = Field(default=None, min_length=1, max_length=160)
+    content: Optional[str] = Field(default=None, min_length=1, max_length=2000)
+    severity: Optional[Literal["紧急", "重要", "一般"]] = None
+    status: Optional[Literal["待处理", "跟进中", "已闭环"]] = None
+    author_name: Optional[str] = Field(default=None, max_length=80)
+    occurred_at: Optional[str] = Field(default=None, max_length=20)
+
+
+class ShiftRecordRevisePayload(BaseModel):
+    """管理员修订班次主档案（人员配置与工况）。"""
+
+    shift_date: str = Field(min_length=8, max_length=20)
+    shift_type: str = Field(min_length=2, max_length=10)
+    shift_leader: Optional[str] = Field(default=None, max_length=50)
+    shift_operator: Optional[str] = Field(default=None, max_length=50)
+    shift_student: Optional[str] = Field(default=None, max_length=50)
+    beam_mode: Optional[str] = Field(default=None, max_length=200)
 
 
 class ForecastPayload(BaseModel):
@@ -723,6 +794,8 @@ def log_dict(log: ShiftLog) -> dict:
         "id": log.id,
         "time": display_time(log.occurred_at),
         "occurred_at": iso(log.occurred_at),
+        "shiftDate": log.shift_date or (log.shift.shift_date.isoformat() if log.shift else None),
+        "shiftType": log.shift_type or (shift_type_label(log.shift.shift_type) if log.shift else None),
         "category": log.category,
         "target": log.target,
         "content": log.content,
@@ -835,6 +908,242 @@ def get_active_shift(db: Session, lock: bool = False) -> DutyShift:
     return shift
 
 
+SHIFT_TYPE_LABELS = {"day": "白班", "night": "夜班"}
+SHIFT_TYPE_KEYS = {"白班": "day", "夜班": "night", "day": "day", "night": "night"}
+HISTORICAL_WRITE_DENIED = "权限不足：历史班次及已交接归档记录仅允许系统管理员修改"
+
+
+def shift_type_label(shift_type: str) -> str:
+    return SHIFT_TYPE_LABELS.get(shift_type, "夜班" if shift_type == "night" else "白班")
+
+
+def shift_type_key(value: str) -> str:
+    return SHIFT_TYPE_KEYS.get(value, "day")
+
+
+def shift_record_dict(record: ShiftRecord) -> dict:
+    return {
+        "id": record.id,
+        "shift_date": record.shift_date,
+        "shift_type": record.shift_type,
+        "shift_leader": record.shift_leader,
+        "shift_operator": record.shift_operator,
+        "shift_student": record.shift_student,
+        "beam_mode": record.beam_mode,
+        "is_handed_over": bool(record.is_handed_over),
+        "revision_version": int(record.revision_version or 1),
+        "last_revised_by": record.last_revised_by,
+        "last_revised_at": record.last_revised_at,
+    }
+
+
+def sync_shift_record(db: Session, shift: DutyShift, handover: bool = False) -> ShiftRecord:
+    """把当晚班次同步进 shift_records 主档案（以日期 + 班次为唯一键）。"""
+    date_str = shift.shift_date.isoformat()
+    label = shift_type_label(shift.shift_type)
+    record = db.scalar(
+        select(ShiftRecord).where(ShiftRecord.shift_date == date_str, ShiftRecord.shift_type == label)
+    )
+    if record is None:
+        record = ShiftRecord(
+            shift_date=date_str,
+            shift_type=label,
+            shift_leader=shift.leader_name,
+            shift_operator=shift.operator_name,
+            shift_student=shift.student_name or "",
+            beam_mode=shift.beam_mode,
+            is_handed_over=handover,
+            revision_version=1,
+        )
+        db.add(record)
+        db.flush()
+        return record
+
+    record.shift_leader = shift.leader_name
+    record.shift_operator = shift.operator_name
+    record.shift_student = shift.student_name or ""
+    record.beam_mode = shift.beam_mode
+    # 归档态与本次同步的班次实例保持一致：
+    # 活动批次必须解除归档（同日可能另有已封班的旧批次），已封班批次则延续 / 置位归档标记
+    if handover:
+        record.is_handed_over = True
+    elif shift.status == "active":
+        record.is_handed_over = False
+    elif shift.status == "closed":
+        record.is_handed_over = bool(record.is_handed_over) or db.scalar(
+            select(ShiftHandover).where(ShiftHandover.shift_id == shift.id)
+        ) is not None
+    return record
+
+
+def get_shift_record(db: Session, shift_date: str, label: str) -> Optional[ShiftRecord]:
+    return db.scalar(
+        select(ShiftRecord).where(ShiftRecord.shift_date == shift_date, ShiftRecord.shift_type == label)
+    )
+
+
+def find_duty_shift(db: Session, shift_date: str, label: str) -> Optional[DutyShift]:
+    """按业务日期 + 班次中文标签定位值班批次。"""
+    try:
+        target = date.fromisoformat(shift_date)
+    except ValueError:
+        return None
+    return db.scalar(
+        select(DutyShift)
+        .where(DutyShift.shift_date == target, DutyShift.shift_type == shift_type_key(label))
+        .order_by(DutyShift.id.desc())
+    )
+
+
+def shift_is_locked(db: Session, shift: Optional[DutyShift] = None, shift_date: Optional[str] = None,
+                    label: Optional[str] = None) -> bool:
+    """判断目标班次是否已属于历史（早于今日）或已提交交接班。
+
+    只有“正在执行（status=active）的当班批次”才不受日期比较影响：
+    跨零点夜班的业务日期天然早于今日，不能仅因日历日期被判为历史归档。
+    """
+    if shift is not None:
+        shift_date = shift_date or shift.shift_date.isoformat()
+        label = label or shift_type_label(shift.shift_type)
+    if not shift_date:
+        return False
+    label = label or "白班"
+    record = get_shift_record(db, shift_date, label)
+    if record is not None and record.is_handed_over:
+        return True
+    duty = shift
+    if duty is None or duty.shift_date.isoformat() != shift_date or shift_type_label(duty.shift_type) != label:
+        duty = find_duty_shift(db, shift_date, label)
+    if duty is not None and duty.status == "active":
+        return False
+    try:
+        target = date.fromisoformat(shift_date)
+    except ValueError:
+        return False
+    # 未来日期不属于有效值班台账，同样视为只允许管理员（补录建档）写入
+    return target != utcnow().date()
+
+
+def assert_shift_writable(db: Session, user: User, shift: Optional[DutyShift] = None,
+                          shift_date: Optional[str] = None, label: Optional[str] = None) -> bool:
+    """历史/已封班记录的写操作守卫。
+
+    返回 True 表示该写操作属于管理员对历史台账的修订，需要递增修订版本号。
+    """
+    # 显式指定的目标日期优先：避免把“活动批次”的身份套用到另一天的补录上
+    if shift is not None and shift_date and shift.shift_date.isoformat() != shift_date:
+        shift = None
+    locked = shift_is_locked(db, shift=shift, shift_date=shift_date, label=label)
+    if not locked:
+        return False
+    if user.role != "admin":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=HISTORICAL_WRITE_DENIED)
+    return True
+
+
+def ensure_shift_record(db: Session, shift_date: str, label: str,
+                        duty: Optional[DutyShift] = None) -> ShiftRecord:
+    """确保指定日期与班次存在主档案；缺失时按班次或默认口径建档。"""
+    record = get_shift_record(db, shift_date, label)
+    if record is not None:
+        return record
+    if duty is None:
+        try:
+            target_date = date.fromisoformat(shift_date)
+        except ValueError:
+            target_date = None
+        if target_date is not None:
+            duty = db.scalar(
+                select(DutyShift)
+                .where(DutyShift.shift_date == target_date, DutyShift.shift_type == shift_type_key(label))
+                .order_by(DutyShift.id.desc())
+            )
+    if duty is not None:
+        return sync_shift_record(db, duty)
+    record = ShiftRecord(shift_date=shift_date, shift_type=label, revision_version=1)
+    db.add(record)
+    db.flush()
+    return record
+
+
+def bump_shift_revision(db: Session, shift_date: str, label: str, user: User,
+                        duty: Optional[DutyShift] = None) -> Optional[ShiftRecord]:
+    """管理员修订历史台账后递增版本号并记录修订留痕。"""
+    record = ensure_shift_record(db, shift_date, label, duty)
+    record.revision_version = int(record.revision_version or 1) + 1
+    record.last_revised_by = user.real_name
+    record.last_revised_at = utcnow().strftime("%Y-%m-%d %H:%M")
+    return record
+
+
+def register_admin_revision(db: Session, changed: bool, user: User,
+                            shift: Optional[DutyShift] = None,
+                            shift_date: Optional[str] = None,
+                            label: Optional[str] = None) -> None:
+    """守卫命中后统一登记修订留痕（仅管理员对历史/已交接批次生效）。"""
+    if not changed:
+        return
+    if shift is not None:
+        shift_date = shift_date or shift.shift_date.isoformat()
+        label = label or shift_type_label(shift.shift_type)
+    if not shift_date:
+        return
+    bump_shift_revision(db, shift_date, label or "白班", user, duty=shift)
+
+
+def ensure_historical_shift(db: Session, shift_date: str, label: str) -> DutyShift:
+    """为尚未建档的历史日期补齐一个已封班班次，便于管理员补录与修订留痕。"""
+    key = shift_type_key(label)
+    target_date = date.fromisoformat(shift_date)
+    start, end = shift_window(target_date, key)
+    previous = db.scalar(
+        select(DutyShift).where(DutyShift.shift_date <= target_date).order_by(
+            DutyShift.shift_date.desc(), DutyShift.id.desc()
+        )
+    )
+    shift = DutyShift(
+        shift_date=target_date,
+        shift_type=key,
+        planned_start=start,
+        planned_end=end,
+        leader_name=previous.leader_name if previous else "周科",
+        operator_name=previous.operator_name if previous else "王健威",
+        student_name=previous.student_name if previous else "",
+        beam_mode=previous.beam_mode if previous else "供束打靶",
+        status="closed",
+        started_at=start,
+        ended_at=end,
+    )
+    db.add(shift)
+    db.flush()
+    sync_shift_record(db, shift, handover=True)
+    return shift
+
+
+def resolve_shift_for_log(db: Session, shift_date: Optional[str], label: Optional[str]) -> DutyShift:
+    """按日期 + 班次定位对应的 duty_shift 记录；缺档的历史日期自动补建封班批次。"""
+    if shift_date and label:
+        normalized = label if label in ("白班", "夜班") else shift_type_label(shift_type_key(label))
+        key = shift_type_key(normalized)
+        try:
+            target_date = date.fromisoformat(shift_date)
+        except ValueError:
+            target_date = None
+        if target_date is not None:
+            found = db.scalar(
+                select(DutyShift)
+                .where(DutyShift.shift_date == target_date, DutyShift.shift_type == key)
+                .order_by(DutyShift.id.desc())
+            )
+            if found is not None:
+                return found
+            active = db.scalar(select(DutyShift).where(DutyShift.status == "active").order_by(DutyShift.id.desc()))
+            if active is not None and active.shift_date == target_date and active.shift_type == key:
+                return active
+            return ensure_historical_shift(db, shift_date, normalized)
+    return get_active_shift(db)
+
+
 def append_log(
     db: Session,
     shift: Optional[DutyShift],
@@ -852,6 +1161,8 @@ def append_log(
         shift = get_active_shift(db)
     log = ShiftLog(
         shift_id=shift.id,
+        shift_date=shift.shift_date.isoformat(),
+        shift_type=shift_type_label(shift.shift_type),
         category=category,
         target=target,
         content=content,
@@ -985,7 +1296,121 @@ def delete_user(user_id: int, admin: User = Depends(require_admin), db: Session 
 
 @app.get("/api/v1/shifts/current")
 def current_shift(_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    return shift_dict(get_active_shift(db))
+    shift = get_active_shift(db)
+    record = sync_shift_record(db, shift)
+    db.commit()
+    payload = shift_dict(shift)
+    payload.update(
+        {
+            "shift_label": shift_type_label(shift.shift_type),
+            "is_handed_over": bool(record.is_handed_over),
+            "revision_version": int(record.revision_version or 1),
+            "last_revised_by": record.last_revised_by,
+            "last_revised_at": record.last_revised_at,
+            "is_locked": shift_is_locked(db, shift=shift, shift_date=record.shift_date,
+                                         label=record.shift_type),
+        }
+    )
+    return payload
+
+
+@app.get("/api/v1/shift-data")
+def shift_data(
+    shift_date: str = Query(alias="date"),
+    shift: str = Query(default="白班"),
+    _user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """按日期 + 班次回溯历史台账：所有角色均可查看。"""
+    try:
+        parsed = date.fromisoformat(shift_date)
+    except ValueError:
+        raise HTTPException(status_code=422, detail="date 必须为 YYYY-MM-DD 格式")
+    label = shift if shift in ("白班", "夜班") else shift_type_label(shift_type_key(shift))
+    key = shift_type_key(label)
+
+    record = get_shift_record(db, shift_date, label)
+    duty = db.scalar(
+        select(DutyShift)
+        .where(DutyShift.shift_date == parsed, DutyShift.shift_type == key)
+        .order_by(DutyShift.id.desc())
+    )
+
+    slots = []
+    if duty is not None:
+        slots = [slot_dict(item) for item in sorted(duty.patrol_slots, key=lambda value: value.planned_at)]
+
+    logs = [
+        log_dict(item)
+        for item in db.scalars(
+            select(ShiftLog)
+            .where(ShiftLog.shift_date == shift_date, ShiftLog.shift_type == label)
+            .order_by(ShiftLog.occurred_at.desc())
+        ).all()
+    ]
+
+    is_empty = record is None and duty is None and not logs
+    locked = shift_is_locked(db, shift=duty, shift_date=shift_date, label=label)
+    meta = shift_record_dict(record) if record is not None else {
+        "id": None,
+        "shift_date": shift_date,
+        "shift_type": label,
+        "shift_leader": duty.leader_name if duty else "",
+        "shift_operator": duty.operator_name if duty else "",
+        "shift_student": duty.student_name if duty else "",
+        "beam_mode": duty.beam_mode if duty else "",
+        "is_handed_over": False,
+        "revision_version": 1,
+        "last_revised_by": None,
+        "last_revised_at": None,
+    }
+    meta["is_locked"] = locked
+    meta["is_today"] = bool(duty is not None and duty.status == "active")
+    meta["is_empty"] = is_empty
+
+    return {
+        "record": meta,
+        "duty_shift": shift_dict(duty) if duty is not None else None,
+        "patrol_slots": slots,
+        "logs": logs,
+        "is_empty": is_empty,
+    }
+
+
+@app.post("/api/v1/shift-records/revise")
+def revise_shift_record(payload: ShiftRecordRevisePayload, user: User = Depends(require_admin),
+                        db: Session = Depends(get_db)):
+    """管理员修订班次主档案（人员/工况）：历史或已交接批次自动递增修订版本号。"""
+    label = payload.shift_type if payload.shift_type in ("白班", "夜班") else shift_type_label(
+        shift_type_key(payload.shift_type)
+    )
+    try:
+        duty = resolve_shift_for_log(db, payload.shift_date, label)
+        record = ensure_shift_record(db, payload.shift_date, label, duty=duty)
+        data = payload.model_dump(exclude_unset=True)
+        changed = False
+        for field in ("shift_leader", "shift_operator", "shift_student", "beam_mode"):
+            value = data.get(field)
+            if value is not None and value != getattr(record, field):
+                setattr(record, field, value)
+                changed = True
+        if duty is not None and duty.shift_date.isoformat() == payload.shift_date:
+            for duty_field, record_field in (
+                ("leader_name", "shift_leader"),
+                ("operator_name", "shift_operator"),
+                ("student_name", "shift_student"),
+                ("beam_mode", "beam_mode"),
+            ):
+                value = data.get(record_field)
+                if value is not None:
+                    setattr(duty, duty_field, value)
+        if changed and shift_is_locked(db, shift=duty, shift_date=payload.shift_date, label=label):
+            bump_shift_revision(db, payload.shift_date, label, user, duty=duty)
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
+    return shift_record_dict(record)
 
 
 @app.get("/api/v1/shifts/{shift_id}/patrol-slots")
@@ -1002,6 +1427,7 @@ def update_shift(shift_id: int, payload: ShiftPayload, _user: User = Depends(req
     if shift is None:
         raise HTTPException(status_code=404, detail="班次不存在")
     try:
+        revision = assert_shift_writable(db, _user, shift=shift)
         data = payload.model_dump(exclude_unset=True)
         for field in ("leader_name", "operator_name", "student_name", "beam_mode"):
             if field in data and data[field] is not None:
@@ -1017,6 +1443,8 @@ def update_shift(shift_id: int, payload: ShiftPayload, _user: User = Depends(req
                 db.delete(slot)
             db.flush()
             generate_slots(db, shift)
+        sync_shift_record(db, shift)
+        register_admin_revision(db, revision, _user, shift=shift)
         db.commit()
     except Exception:
         db.rollback()
@@ -1101,21 +1529,52 @@ def list_shift_logs(
 
 @app.post("/api/v1/shift-logs", status_code=status.HTTP_201_CREATED)
 def create_shift_log(payload: LogCreatePayload, user: User = Depends(require_operator_or_admin), db: Session = Depends(get_db)):
-    shift = get_active_shift(db)
-    log = append_log(
-        db,
-        shift,
-        user,
-        payload.category,
-        payload.target.strip(),
-        payload.content.strip(),
-        payload.severity,
-        payload.status,
-        payload.author_name or user.real_name,
-        "manual",
-    )
-    db.commit()
+    shift = resolve_shift_for_log(db, payload.shift_date, payload.shift_type)
+    try:
+        revision = assert_shift_writable(db, user, shift=shift)
+        log = append_log(
+            db,
+            shift,
+            user,
+            payload.category,
+            payload.target.strip(),
+            payload.content.strip(),
+            payload.severity,
+            payload.status,
+            payload.author_name or user.real_name,
+            "manual",
+        )
+        # 管理员为历史班次补录时，业务时间需落在该班次日期内，保留补录语境的真实时间戳
+        target_date = payload.shift_date or shift.shift_date.isoformat()
+        log.shift_date = target_date
+        log.shift_type = payload.shift_type or shift_type_label(shift.shift_type)
+        occurred_at = parse_business_time(payload.occurred_at, target_date)
+        if occurred_at is not None:
+            log.occurred_at = occurred_at
+        register_admin_revision(db, revision, user, shift=shift, shift_date=log.shift_date, label=log.shift_type)
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
     return log_dict(log)
+
+
+def parse_business_time(value: Optional[str], default_date: str) -> Optional[datetime]:
+    """解析补录时间：支持 YYYY-MM-DD HH:mm / HH:mm，缺省日期取目标班次日期。"""
+    if not value:
+        return None
+    text = value.strip()
+    for pattern in ("%Y-%m-%d %H:%M", "%Y-%m-%d %H:%M:%S"):
+        try:
+            return datetime.strptime(text, pattern)
+        except ValueError:
+            continue
+    try:
+        parsed = datetime.strptime(text, "%H:%M")
+        base = datetime.strptime(default_date, "%Y-%m-%d")
+        return base.replace(hour=parsed.hour, minute=parsed.minute)
+    except ValueError:
+        return None
 
 
 @app.patch("/api/v1/shift-logs/{log_id}")
@@ -1123,8 +1582,43 @@ def update_shift_log(log_id: int, payload: LogStatusPayload, _user: User = Depen
     log = db.get(ShiftLog, log_id)
     if log is None:
         raise HTTPException(status_code=404, detail="流水不存在")
-    log.status = payload.status
-    db.commit()
+    try:
+        revision = assert_shift_writable(db, _user, shift=log.shift, shift_date=log.shift_date,
+                                        label=log.shift_type)
+        log.status = payload.status
+        register_admin_revision(db, revision, _user, shift=log.shift, shift_date=log.shift_date,
+                                label=log.shift_type)
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
+    return log_dict(log)
+
+
+@app.put("/api/v1/shift-logs/{log_id}")
+def update_shift_log_content(log_id: int, payload: LogUpdatePayload,
+                             _user: User = Depends(require_operator_or_admin), db: Session = Depends(get_db)):
+    """单条运行流水的更正入口：历史/已交接班次仅管理员可用。"""
+    log = db.get(ShiftLog, log_id)
+    if log is None:
+        raise HTTPException(status_code=404, detail="流水不存在")
+    try:
+        revision = assert_shift_writable(db, _user, shift=log.shift, shift_date=log.shift_date,
+                                        label=log.shift_type)
+        data = payload.model_dump(exclude_unset=True)
+        for field in ("category", "target", "content", "severity", "status", "author_name"):
+            value = data.get(field)
+            if value is not None:
+                setattr(log, field, value)
+        occurred_at = parse_business_time(data.get("occurred_at"), log.shift_date or "")
+        if occurred_at is not None:
+            log.occurred_at = occurred_at
+        register_admin_revision(db, revision, _user, shift=log.shift, shift_date=log.shift_date,
+                                label=log.shift_type)
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
     return log_dict(log)
 
 
@@ -1134,6 +1628,7 @@ def checkin_patrol_slot(slot_id: int, payload: CheckinPayload, user: User = Depe
         slot = db.get(PatrolSlot, slot_id, with_for_update=True)
         if slot is None:
             raise HTTPException(status_code=404, detail="巡查槽不存在")
+        revision = assert_shift_writable(db, user, shift=slot.shift)
         if slot.status == "checked":
             raise HTTPException(status_code=409, detail="该巡查槽已打卡")
         now = utcnow()
@@ -1147,6 +1642,7 @@ def checkin_patrol_slot(slot_id: int, payload: CheckinPayload, user: User = Depe
             f"{slot.slot_key} 现场巡查完成：{slot.result}",
             "一般", "已闭环", slot.checker_name, "patrol_slot", str(slot.id),
         )
+        register_admin_revision(db, revision, user, shift=slot.shift)
         db.commit()
     except Exception:
         db.rollback()
@@ -1160,6 +1656,7 @@ def report_patrol_anomaly(slot_id: int, payload: AnomalyPayload, user: User = De
         slot = db.get(PatrolSlot, slot_id, with_for_update=True)
         if slot is None:
             raise HTTPException(status_code=404, detail="巡查槽不存在")
+        revision = assert_shift_writable(db, user, shift=slot.shift)
         now = utcnow()
         description = payload.description.strip()
         slot.status = "anomaly"
@@ -1188,6 +1685,7 @@ def report_patrol_anomaly(slot_id: int, payload: AnomalyPayload, user: User = De
         db.add(event)
         db.flush()
         db.add(EventHistory(event_id=event.id, from_stage=None, to_stage="pending", operator_user_id=user.id, operator_name=slot.checker_name, note=f"巡查上报：{description}"))
+        register_admin_revision(db, revision, user, shift=slot.shift)
         db.commit()
     except Exception:
         db.rollback()
@@ -1200,12 +1698,18 @@ def reset_patrol_slot(slot_id: int, _user: User = Depends(require_operator_or_ad
     slot = db.get(PatrolSlot, slot_id)
     if slot is None:
         raise HTTPException(status_code=404, detail="巡查槽不存在")
-    slot.status = "pending"
-    slot.result = "待到点巡查"
-    slot.anomaly_detail = None
-    slot.checker_name = None
-    slot.checked_at = None
-    db.commit()
+    try:
+        revision = assert_shift_writable(db, _user, shift=slot.shift)
+        slot.status = "pending"
+        slot.result = "待到点巡查"
+        slot.anomaly_detail = None
+        slot.checker_name = None
+        slot.checked_at = None
+        register_admin_revision(db, revision, _user, shift=slot.shift)
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
     return slot_dict(slot)
 
 
@@ -1623,6 +2127,7 @@ def create_handover(shift_id: int, payload: HandoverPayload, user: User = Depend
         shift = db.get(DutyShift, shift_id, with_for_update=True)
         if shift is None:
             raise HTTPException(status_code=404, detail="班次不存在")
+        assert_shift_writable(db, user, shift=shift)
         if db.scalar(select(ShiftHandover).where(ShiftHandover.shift_id == shift_id, ShiftHandover.status == "archived")):
             raise HTTPException(status_code=409, detail="该班次已完成交接归档")
         alarms = [log_dict(item) for item in db.scalars(select(ShiftLog).where(ShiftLog.shift_id == shift_id, ShiftLog.status != "已闭环")).all()]
@@ -1650,6 +2155,7 @@ def create_handover(shift_id: int, payload: HandoverPayload, user: User = Depend
             f"电子交接班已归档：{shift.leader_name}/{shift.operator_name} → {handover.next_leader_name}；未闭环报警 {len(alarms)} 项，未完成待办 {len(todos)} 项。",
             "重要", "已闭环", user.real_name, "handover", str(handover.id),
         )
+        sync_shift_record(db, shift, handover=True)
         following = create_following_shift(db, shift, handover.next_leader_name)
         db.commit()
     except Exception:
@@ -1721,10 +2227,27 @@ def bootstrap(_user: User = Depends(get_current_user), db: Session = Depends(get
     events = db.scalars(select(Event).options(selectinload(Event.history)).order_by(Event.created_at.desc())).all()
     nav_items = db.scalars(select(NavItem).where(NavItem.is_active.is_(True)).order_by(NavItem.sort_order, NavItem.id)).all()
     logs = db.scalars(select(ShiftLog).where(ShiftLog.shift_id == shift.id).order_by(ShiftLog.occurred_at.desc()).limit(200)).all()
+    record = sync_shift_record(db, shift)
+    db.commit()
+    shift_payload = shift_dict(shift)
+    shift_payload.update(
+        {
+            "shift_label": shift_type_label(shift.shift_type),
+            "is_handed_over": bool(record.is_handed_over),
+            "revision_version": int(record.revision_version or 1),
+            "last_revised_by": record.last_revised_by,
+            "last_revised_at": record.last_revised_at,
+        }
+    )
     todos = list_visible_todos(db)
     slots = sorted(shift.patrol_slots, key=lambda item: item.planned_at)
+    record_payload = shift_record_dict(record)
+    record_payload["is_locked"] = shift_is_locked(db, shift=shift, shift_date=record.shift_date,
+                                                 label=record.shift_type)
+    record_payload["is_today"] = shift.status == "active"
     return {
-        "shift": shift_dict(shift),
+        "shift": shift_payload,
+        "shift_record": record_payload,
         "patrol_slots": [slot_dict(item) for item in slots],
         "todos": [todo_dict(item) for item in todos],
         "logs": [log_dict(item) for item in logs],

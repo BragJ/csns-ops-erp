@@ -64,6 +64,27 @@ class PatrolSlot(Base):
     shift: Mapped["DutyShift"] = relationship(back_populates="patrol_slots")
 
 
+class ShiftRecord(Base):
+    """班次主档案：以 (shift_date, shift_type) 唯一标识一个历史班次台账。"""
+
+    __tablename__ = "shift_records"
+    __table_args__ = (UniqueConstraint("shift_date", "shift_type", name="uq_shift_record_date_type"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    shift_date: Mapped[str] = mapped_column(String(20), index=True, nullable=False)
+    shift_type: Mapped[str] = mapped_column(String(10), index=True, nullable=False)
+    shift_leader: Mapped[str] = mapped_column(String(50), default="周科", nullable=False)
+    shift_operator: Mapped[str] = mapped_column(String(50), default="王健威", nullable=False)
+    shift_student: Mapped[str] = mapped_column(String(50), default="张超月", nullable=False)
+    beam_mode: Mapped[str] = mapped_column(
+        String(200), default="加速器 200kW, 25Hz 供束打靶，谱仪正常实验", nullable=False
+    )
+    is_handed_over: Mapped[bool] = mapped_column(Boolean, default=False, index=True, nullable=False)
+    revision_version: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
+    last_revised_by: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+    last_revised_at: Mapped[Optional[str]] = mapped_column(String(30), nullable=True)
+
+
 class ShiftTodo(Base):
     __tablename__ = "shift_todos"
 
@@ -86,6 +107,8 @@ class ShiftLog(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     shift_id: Mapped[int] = mapped_column(ForeignKey("duty_shifts.id", ondelete="CASCADE"), index=True, nullable=False)
+    shift_date: Mapped[Optional[str]] = mapped_column(String(20), index=True, nullable=True)
+    shift_type: Mapped[Optional[str]] = mapped_column(String(10), index=True, nullable=True)
     occurred_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, index=True, nullable=False)
     category: Mapped[str] = mapped_column(String(30), index=True, nullable=False)
     target: Mapped[str] = mapped_column(String(160), nullable=False)
