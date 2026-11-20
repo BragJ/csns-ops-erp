@@ -253,6 +253,34 @@
     @keyframes agentCaretBlink {
       50% { opacity: 0; }
     }
+    /* ========== 值班记录 A4 预览 / 打印兜底 ========== */
+    @media print {
+      /* 直接打印主页面时，仅保留 A4 纸张内容，避免按钮栏与遮罩产生偏移或空白页 */
+      html, body { background: #ffffff !important; }
+      body > *:not(#modalShiftPdfPreview) { display: none !important; }
+      #modalShiftPdfPreview {
+        position: static !important; inset: auto !important; display: block !important;
+        padding: 0 !important; margin: 0 !important; background: #ffffff !important;
+        backdrop-filter: none !important;
+      }
+      #modalShiftPdfPreview > div:first-child,
+      #pdfGeneratingMask,
+      #pdfExportStaging { display: none !important; }
+      #pdfPreviewStage {
+        display: block !important; width: 100% !important; max-width: none !important;
+        padding: 0 !important; margin: 0 !important; background: #ffffff !important;
+        border: none !important; border-radius: 0 !important; overflow: visible !important;
+      }
+      #pdfPreviewPaperSheet {
+        width: 100% !important; max-width: 100% !important; min-height: auto !important;
+        margin: 0 !important; padding: 0 !important; box-shadow: none !important;
+        border: none !important; border-radius: 0 !important; background: #ffffff !important;
+      }
+      #pdfPreviewPaperSheet table { width: 100% !important; table-layout: fixed !important; border-collapse: collapse !important; }
+      #pdfPreviewPaperSheet td, #pdfPreviewPaperSheet th { word-break: break-all; white-space: normal; box-sizing: border-box; }
+      tr, table { page-break-inside: avoid; break-inside: avoid; }
+      @page { size: A4 portrait; margin: 10mm; }
+    }
     /* ========== GraphRAG 3D 知识图谱（作用域限定） ========== */
     #view-graphrag {
       background-color: #020617;
@@ -572,8 +600,11 @@
               <button onclick="toggleShiftMode()" id="btnToggleShift" class="text-[10px] px-2 py-0.5 rounded bg-sky-900/50 hover:bg-sky-800 text-sky-300 border border-sky-700/60 transition-colors">切换夜班</button>
             </div>
             <div class="flex flex-wrap items-center gap-1.5 mt-2">
-              <label for="shiftDatePicker" class="text-[10px] text-slate-400 flex items-center gap-1"><i class="ph ph-calendar-blank"></i> 回溯日期</label>
-              <input type="date" id="shiftDatePicker" onchange="handleShiftDateChange(this.value)" class="bg-slate-950 border border-slate-700 rounded px-2 py-1 text-xs font-mono text-sky-300 focus:outline-none focus:border-sky-500">
+              <span id="historicalDatePickerWrapper" class="flex flex-wrap items-center gap-1.5">
+                <label for="shiftDatePicker" class="text-[10px] text-slate-400 flex items-center gap-1"><i class="ph ph-calendar-blank"></i> 回溯日期</label>
+                <input type="date" id="shiftDatePicker" onchange="handleShiftDateChange(this.value)" class="bg-slate-950 border border-slate-700 rounded px-2 py-1 text-xs font-mono text-sky-300 focus:outline-none focus:border-sky-500 disabled:opacity-50 disabled:cursor-not-allowed">
+              </span>
+              <span id="historicalDateLockBadge" class="hidden px-2 py-1 rounded text-[10px] font-mono bg-slate-800 text-slate-400 border border-slate-700">&#128274; 今日当班（历史记录仅管理员可查/导出）</span>
               <select id="shiftTypePicker" onchange="handleShiftTypeChange(this.value)" class="bg-slate-950 border border-slate-700 rounded px-2 py-1 text-xs font-mono text-sky-300 focus:outline-none focus:border-sky-500">
                 <option value="白班">白班</option>
                 <option value="夜班">夜班</option>
@@ -586,9 +617,9 @@
                 <i class="ph ph-signature text-sm text-sky-400"></i>
                 <span>电子交接班</span>
               </button>
-              <button onclick="exportShiftPDF()" class="w-full bg-gradient-to-r from-sky-600 to-cyan-600 hover:from-sky-500 hover:to-cyan-500 text-white text-xs font-semibold py-2 px-2 rounded-lg flex items-center justify-center gap-1 shadow-md shadow-sky-600/30 transition-all">
-                <i class="ph ph-file-pdf text-sm"></i>
-                <span>导出运行值班记录PDF</span>
+              <button id="btnExportShiftPdf" onclick="openShiftPdfPreview()" class="w-full bg-gradient-to-r from-sky-600 to-cyan-600 hover:from-sky-500 hover:to-cyan-500 text-white text-xs font-semibold py-2 px-2 rounded-lg flex items-center justify-center gap-1 shadow-md shadow-sky-600/30 transition-all disabled:opacity-45 disabled:cursor-not-allowed">
+                <i class="ph ph-eye text-sm"></i>
+                <span>预览并导出PDF</span>
               </button>
             </div>
           </div>
@@ -2755,97 +2786,35 @@
   <!-- ======================================================== -->
   <!-- STANDARD A4 PORTRAIT PDF TEMPLATE (750px Standard Width) -->
   <!-- ======================================================== -->
-  <div id="pdfPrintWrapper" style="display: none; width: 100%; background: #ffffff;">
-    <div id="printableShiftReport" style="width: 750px; min-height: 1050px; margin: 0 auto; padding: 24px 30px; font-family: 'SimSun', 'Songti SC', 'STSong', serif; color: #111; background: #ffffff; line-height: 1.45; box-sizing: border-box;">
-      
-      <!-- Report Title Header -->
-      <div style="text-align: center; border-bottom: 2px solid #000; padding-bottom: 8px; margin-bottom: 12px;">
-        <h2 id="pdfReportTitle" style="font-size: 21px; font-weight: bold; margin: 0; letter-spacing: 1.5px; color: #000;">靶站谱仪运行值班记录</h2>
-        <div style="font-size: 12px; color: #444; margin-top: 3px; font-family: 'Inter', sans-serif;">Target Station & Spectrometer Daily Operations Duty Log</div>
+  <!-- A4 值班记录仿真预览模态框：先核对排版，再确认下载/打印 -->
+  <div id="modalShiftPdfPreview" class="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 hidden flex-col items-center justify-center p-2 sm:p-4">
+    <div class="w-full max-w-4xl bg-[#0f172a] border border-slate-700 rounded-t-xl px-4 py-3 flex flex-wrap items-center justify-between gap-2">
+      <div class="flex flex-wrap items-center gap-2">
+        <h3 class="text-sm font-bold text-white flex items-center gap-1.5">
+          <i class="ph ph-file-text text-sky-400"></i>
+          <span>靶站谱仪运行值班记录 — A4 排版预览</span>
+        </h3>
+        <span id="pdfPreviewMetaBadge" class="px-2 py-0.5 rounded text-[10px] font-mono bg-slate-800 text-sky-300 border border-slate-700">--</span>
       </div>
-
-      <!-- Header Grid Table matching handwritten sheet -->
-      <table style="width: 100%; border-collapse: collapse; border: 1.5px solid #000; font-size: 12px; margin-bottom: 12px; table-layout: fixed;">
-        <tr>
-          <td style="border: 1px solid #000; padding: 5px 8px; font-weight: bold; width: 14%; background: #f2f2f2; text-align: center;">值班日期</td>
-          <td id="pdfDate" style="border: 1px solid #000; padding: 5px 8px; width: 36%;">2026年11月04日 (星期三)</td>
-          <td style="border: 1px solid #000; padding: 5px 8px; font-weight: bold; width: 14%; background: #f2f2f2; text-align: center;">值班班次</td>
-          <td id="pdfShiftName" style="border: 1px solid #000; padding: 5px 8px; width: 36%;">白班 (08:00 ~ 17:30)</td>
-        </tr>
-        <tr>
-          <td style="border: 1px solid #000; padding: 5px 8px; font-weight: bold; background: #f2f2f2; text-align: center;">值班长</td>
-          <td id="pdfLeader" style="border: 1px solid #000; padding: 5px 8px;">王征</td>
-          <td style="border: 1px solid #000; padding: 5px 8px; font-weight: bold; background: #f2f2f2; text-align: center;">值班员</td>
-          <td id="pdfOperator" style="border: 1px solid #000; padding: 5px 8px;">王健威 (坐班: 张超月)</td>
-        </tr>
-        <tr>
-          <td style="border: 1px solid #000; padding: 5px 8px; font-weight: bold; background: #f2f2f2; text-align: center;">本班模式</td>
-          <td colspan="3" id="pdfMode" style="border: 1px solid #000; padding: 5px 8px; font-weight: bold; color: #003366;">
-            加速器 200kW, 25Hz 供束打靶，谱仪正常实验
-          </td>
-        </tr>
-      </table>
-
-      <!-- 1. 3-Hour Inspection Summary Table -->
-      <div style="font-weight: bold; font-size: 13px; margin-bottom: 5px; color: #000;">【一、现场例行巡查记录表 (0点起每3小时)】</div>
-      <table style="width: 100%; border-collapse: collapse; border: 1.5px solid #000; font-size: 11.5px; margin-bottom: 12px; table-layout: fixed;">
-        <thead style="background: #f7f7f7;">
-          <tr>
-            <th style="border: 1px solid #000; padding: 4px; width: 15%; text-align: center;">巡查时间</th>
-            <th style="border: 1px solid #000; padding: 4px; width: 20%; text-align: center;">核验状态</th>
-            <th style="border: 1px solid #000; padding: 4px; width: 50%;">现场征候与核验区域</th>
-            <th style="border: 1px solid #000; padding: 4px; width: 15%; text-align: center;">巡检人</th>
-          </tr>
-        </thead>
-        <tbody id="pdfPatrolTableBody">
-          <!-- Dynamically filled -->
-        </tbody>
-      </table>
-
-      <!-- 2. Shift Todo / Tasks Summary Table -->
-      <div style="font-weight: bold; font-size: 13px; margin-bottom: 5px; color: #000;">【二、班次定时待办与跑腿琐事落实情况】</div>
-      <table style="width: 100%; border-collapse: collapse; border: 1.5px solid #000; font-size: 11.5px; margin-bottom: 12px; table-layout: fixed;">
-        <thead style="background: #f7f7f7;">
-          <tr>
-            <th style="border: 1px solid #000; padding: 4px; width: 22%; text-align: center;">约定时间</th>
-            <th style="border: 1px solid #000; padding: 4px; width: 18%; text-align: center;">落实状态</th>
-            <th style="border: 1px solid #000; padding: 4px; width: 60%;">待办事项与执行结果</th>
-          </tr>
-        </thead>
-        <tbody id="pdfTodoTableBody">
-          <!-- Dynamically filled -->
-        </tbody>
-      </table>
-
-      <!-- 3. Running Alarm & Event Logs -->
-      <div style="font-weight: bold; font-size: 13px; margin-bottom: 5px; color: #000;">【三、设备报警与突发事件处置流水账】</div>
-      <table style="width: 100%; border-collapse: collapse; border: 1.5px solid #000; font-size: 11px; margin-bottom: 12px; table-layout: fixed;">
-        <thead style="background: #f7f7f7;">
-          <tr>
-            <th style="border: 1px solid #000; padding: 4px; width: 11%; text-align: center;">时间</th>
-            <th style="border: 1px solid #000; padding: 4px; width: 18%;">所属系统/谱仪</th>
-            <th style="border: 1px solid #000; padding: 4px; width: 57%;">处置记录与过程描述</th>
-            <th style="border: 1px solid #000; padding: 4px; width: 14%; text-align: center;">状态/闭环人</th>
-          </tr>
-        </thead>
-        <tbody id="pdfLogTableBody">
-          <!-- Dynamically filled -->
-        </tbody>
-      </table>
-
-      <!-- 4. Signatures & Cryptographic Audit Timestamp -->
-      <div style="border: 1.5px solid #000; padding: 8px 12px; background: #fafafa; font-size: 11.5px; box-sizing: border-box;">
-        <div style="display: flex; justify-content: space-between; margin-bottom: 5px;">
-          <div><strong>交班双人签字：</strong> <span id="pdfSignPair">王征 (值班长)、王健威 (值班员)、张超月 (学生)</span></div>
-          <div><strong>接班签章：</strong> 周科 (已核验)</div>
-        </div>
-        <div style="border-top: 1px dashed #bbb; padding-top: 5px; display: flex; justify-content: space-between; font-size: 10.5px; color: #555;">
-          <span><strong>审计防伪戳 (SHA-256)：</strong> <code id="pdfSecurityHash" style="font-family: monospace;">9A8F2C7104B28D7E6F1A90C4</code></span>
-          <span><strong>生成时间：</strong> <span id="pdfExportTimestamp">2026-11-04 17:30:15</span></span>
-        </div>
-        <div id="pdfRevisionTrace" class="hidden" style="border-top: 1px dashed #bbb; margin-top: 5px; padding-top: 5px; font-size: 10.5px; color: #900; font-weight: bold;"></div>
+      <div class="flex flex-wrap items-center gap-2">
+        <button onclick="closeShiftPdfPreview()" class="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-600 text-xs font-medium flex items-center gap-1 transition-colors">
+          <i class="ph ph-pencil-simple"></i>
+          <span>返回修改</span>
+        </button>
+        <button onclick="printShiftPdfPreview()" class="px-3 py-1.5 rounded-lg bg-slate-700 hover:bg-slate-600 text-slate-100 border border-slate-500 text-xs font-medium flex items-center gap-1 transition-colors">
+          <i class="ph ph-printer"></i>
+          <span>浏览器打印</span>
+        </button>
+        <button id="btnConfirmShiftPdf" onclick="confirmDownloadShiftPdf()" class="px-3 py-1.5 rounded-lg bg-gradient-to-r from-emerald-600 to-teal-500 hover:from-emerald-500 hover:to-teal-400 text-white text-xs font-bold flex items-center gap-1 shadow-md shadow-emerald-600/30 transition-all disabled:opacity-50 disabled:cursor-not-allowed">
+          <i class="ph ph-download-simple"></i>
+          <span>确认下载 PDF</span>
+        </button>
       </div>
-
+    </div>
+    <div id="pdfPreviewStage" class="w-full max-w-4xl flex-1 overflow-y-auto bg-slate-800/90 border-x border-b border-slate-700 rounded-b-xl p-4 sm:p-8 flex justify-center">
+      <div id="pdfPreviewPaperSheet" class="text-black" style="width: 780px; min-height: 1100px; background: #ffffff; color: #000000; padding: 28px 34px; box-shadow: 0 20px 50px rgba(0,0,0,0.65); font-family: 'PingFang SC', 'Microsoft YaHei', sans-serif; box-sizing: border-box;">
+        <!-- 由 populateShiftPdfPreviewSheet() 动态填充 -->
+      </div>
     </div>
   </div>
 
@@ -3173,12 +3142,7 @@
       renderAssistTable();
       renderShiftHistoryBanner();
       applyShiftLockUI();
-    }
-
-    function switchRole(role) {
-      applyRolePermissions(role);
-      const roleNameMap = { admin: "系统管理员", operator: "在岗值班员", viewer: "只读观察员" };
-      showToast(`身份已切换为【${roleNameMap[role]}】· 界面权限已生效`);
+      updateShiftHistoryPermissionUI();
     }
 
     // Modal 控制函数
@@ -3226,7 +3190,7 @@
         role: "viewer", // 关键安全红线：新注册账号默认只读
         dept: dept,
         status: "pending",
-        regDate: new Date().toISOString().split('T')[0]
+        regDate: getLocalBeijingDateStr()
       };
 
       userAccounts.push(newUser);
@@ -3326,24 +3290,128 @@
     let isDayShift = true; // True: 白班 (08:00-17:30), False: 夜班 (17:30-08:00)
     let currentStudent = "张超月";
 
+    // ==========================================
+    // 0. 统一北京时间（UTC+8）时间工具
+    //    严禁使用 toISOString()：它会把本地时间强制折算成 UTC，
+    //    在 UTC+8 的工位机上会凭空回退 8 小时（13:08 -> 05:08）。
+    // ==========================================
+    // 显式按 UTC+8 折算：终端/浏览器跑在 UTC 或其它时区时，仍然得到北京时间，
+    // 与后端 get_beijing_now() 完全对齐（不依赖客户端本地时区设置）。
+    const CN_OFFSET_MS = 8 * 60 * 60 * 1000;
+
+    function toBeijingParts(d = new Date()) {
+      const value = d instanceof Date ? d : new Date(d);
+      if (Number.isNaN(value.getTime())) return null;
+      const shifted = new Date(value.getTime() + CN_OFFSET_MS);
+      return {
+        Y: shifted.getUTCFullYear(),
+        M: String(shifted.getUTCMonth() + 1).padStart(2, '0'),
+        D: String(shifted.getUTCDate()).padStart(2, '0'),
+        hh: String(shifted.getUTCHours()).padStart(2, '0'),
+        mm: String(shifted.getUTCMinutes()).padStart(2, '0')
+      };
+    }
+
+    function getLocalBeijingDateStr(d = new Date()) {
+      const p = toBeijingParts(d);
+      return p ? `${p.Y}-${p.M}-${p.D}` : '';
+    }
+
+    function getLocalBeijingTimeStr(d = new Date()) {
+      const p = toBeijingParts(d);
+      return p ? `${p.hh}:${p.mm}` : '';
+    }
+
+    function getLocalBeijingDateTimeStr(d = new Date()) {
+      const p = toBeijingParts(d);
+      return p ? `${p.Y}-${p.M}-${p.D} ${p.hh}:${p.mm}` : '';
+    }
+
     function formatLogDateTime(date = new Date()) {
-      const value = date instanceof Date ? date : new Date(date);
-      if (Number.isNaN(value.getTime())) return '';
-      const Y = value.getFullYear();
-      const M = String(value.getMonth() + 1).padStart(2, '0');
-      const D = String(value.getDate()).padStart(2, '0');
-      const hh = String(value.getHours()).padStart(2, '0');
-      const mm = String(value.getMinutes()).padStart(2, '0');
-      return `${Y}-${M}-${D} ${hh}:${mm}`;
+      return getLocalBeijingDateTimeStr(date);
+    }
+
+    // ==========================================
+    // 0-2. 运行值班业务日（CSNS 两班制口径）
+    //   白班 08:00~17:30          -> 业务日 = 当日
+    //   夜班 17:30~次日 08:00      -> 业务日 = 夜班开始当天
+    //   因此 19 日 00:00~08:30 仍属“18 日夜班”，
+    //   PDF 值班日期与文件名必须落在 18 日，而不是自然日 19 日。
+    // ==========================================
+    const DAY_SHIFT_START_DECIMAL = 8.5;   // 08:30 起算白班（含早间交接宽限）
+    const NIGHT_SHIFT_START_DECIMAL = 17.5; // 17:30 起算夜班
+    const MORNING_HANDOVER_WINDOW_HOUR = 9.5; // 00:00~09:30 夜班交接宽限期
+
+    function formatDateYMD(d) {
+      const p = toBeijingParts(d);
+      return p ? `${p.Y}-${p.M}-${p.D}` : '';
+    }
+
+    function shiftDateByDays(dateStr, deltaDays) {
+      const m = String(dateStr || '').match(/^(\d{4})-(\d{2})-(\d{2})$/);
+      if (!m) return dateStr;
+      const base = new Date(Date.UTC(+m[1], +m[2] - 1, +m[3]) + deltaDays * 86400000);
+      return `${base.getUTCFullYear()}-${String(base.getUTCMonth() + 1).padStart(2, '0')}-${String(base.getUTCDate()).padStart(2, '0')}`;
+    }
+
+    // 自动推算当前时刻物理上对应的【当班业务日期】与【班次】
+    function getActiveOperationalContext(now = new Date()) {
+      const p = toBeijingParts(now);
+      if (!p) return { dateStr: '', shiftType: '白班', isDayShift: true, timeDecimal: 0 };
+      const timeDecimal = Number(p.hh) + Number(p.mm) / 60;
+      const todayStr = `${p.Y}-${p.M}-${p.D}`;
+
+      // 1. 17:30 ~ 23:59：当日夜班上半场 -> 归属当日
+      if (timeDecimal >= NIGHT_SHIFT_START_DECIMAL) {
+        return { dateStr: todayStr, shiftType: '夜班', isDayShift: false, timeDecimal };
+      }
+
+      // 2. 00:00 ~ 08:30：跨零点夜班下半场及早间交接窗口 -> 归属前一天的夜班
+      if (timeDecimal < DAY_SHIFT_START_DECIMAL) {
+        return { dateStr: shiftDateByDays(todayStr, -1), shiftType: '夜班', isDayShift: false, timeDecimal };
+      }
+
+      // 3. 08:30 ~ 17:30：当日白班 -> 归属当日
+      return { dateStr: todayStr, shiftType: '白班', isDayShift: true, timeDecimal };
+    }
+
+    // 早间交接宽限：00:00~09:30 允许值班员操作昨晚（前一天）的夜班台账
+    function inMorningHandoverWindow(now = new Date()) {
+      const ctx = getActiveOperationalContext(now);
+      return ctx.timeDecimal < MORNING_HANDOVER_WINDOW_HOUR;
+    }
+
+    // 当前允许值班员操作的“业务日期 + 班次”集合（含 00:00~09:30 早间交接宽限）
+    function getOperationalDutyTargets(now = new Date()) {
+      const ctx = getActiveOperationalContext(now);
+      const targets = [{ dateStr: ctx.dateStr, shiftType: ctx.shiftType }];
+      if (inMorningHandoverWindow(now)) {
+        const yesterday = shiftDateByDays(formatDateYMD(now), -1);
+        if (!targets.some(t => t.dateStr === yesterday && t.shiftType === '夜班')) {
+          targets.push({ dateStr: yesterday, shiftType: '夜班' });
+        }
+      }
+      return targets;
+    }
+
+    // 某个“日期 + 班次”是否属于当前正在执行的当班业务批次
+    function isCurrentActiveDutyShift(dateStr, shiftType) {
+      if (!dateStr) return false;
+      const label = shiftType === 'night' ? '夜班' : (shiftType === 'day' ? '白班' : shiftType);
+      return getOperationalDutyTargets().some(t => t.dateStr === dateStr && t.shiftType === label);
     }
 
     function normalizeLogTime(value, occurredAt) {
+      // 后端已统一返回北京时间纯字符串，字面量优先，杜绝再做一次时区换算
+      const text = String(value || '').trim();
+      if (/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}/.test(text)) return text.slice(0, 16);
       if (occurredAt) {
+        const raw = String(occurredAt).trim();
+        // 后端 naive 时间戳本身就是北京时间，按字面量取前 16 位
+        if (/^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}/.test(raw)) return raw.replace('T', ' ').slice(0, 16);
         const formatted = formatLogDateTime(occurredAt);
         if (formatted) return formatted;
       }
-      const text = String(value || '').trim();
-      if (/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}/.test(text)) return text.slice(0, 16);
       const timeMatch = text.match(/^(\d{2}):(\d{2})(?::(\d{2}))?$/);
       if (timeMatch) return `${formatLogDateTime().slice(0, 10)} ${timeMatch[1]}:${timeMatch[2]}`;
       return text;
@@ -3645,6 +3713,15 @@
     // INITIALIZATION & TAB SWITCHING
     // ==========================================
     window.onload = function() {
+      // 初始化即对齐业务日班次：19 日 08:05 打开页面直接定位到 18 日夜班
+      const ctx = getActiveOperationalContext();
+      viewingDate = ctx.dateStr;
+      viewingShiftLabel = ctx.shiftType;
+      isDayShift = ctx.isDayShift;
+      const datePicker = document.getElementById('shiftDatePicker');
+      const typePicker = document.getElementById('shiftTypePicker');
+      if (datePicker) datePicker.value = ctx.dateStr;
+      if (typePicker) typePicker.value = ctx.shiftType;
       updateShiftBannerTime();
       initClock();
     };
@@ -3658,8 +3735,8 @@
       updateShiftBannerTime();
       setInterval(() => {
         const now = new Date();
-        setSafeText('liveClock', now.toTimeString().split(' ')[0]);
-        setSafeText('liveDate', `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`);
+        setSafeText('liveClock', `${getLocalBeijingTimeStr(now)}:${String(new Date(now.getTime() + CN_OFFSET_MS).getUTCSeconds()).padStart(2, '0')}`);
+        setSafeText('liveDate', getLocalBeijingDateStr(now));
         updateShiftBannerTime();
       }, 1000);
     }
@@ -3852,7 +3929,7 @@
         verdictDetail.textContent = profile.verdictDetail || '';
         verdictDetail.classList.toggle('hidden', !profile.verdictDetail);
       }
-      setAgentText('agentHeartbeat', `${new Date().toLocaleTimeString('zh-CN', { hour12: false })} (实时在线)`);
+      setAgentText('agentHeartbeat', `${getLocalBeijingTimeStr()}:${String(new Date(Date.now() + CN_OFFSET_MS).getUTCSeconds()).padStart(2, '0')} (实时在线)`);
       setAgentText('agentReasonText', profile.reason);
       setAgentText('agentReferenceText', profile.reference);
       setAgentText('agentAdviceText', profile.advice);
@@ -4050,6 +4127,10 @@
     }
 
     // Toggle Day/Night Shift mode
+    // 早间交接（00:00~12:00）跨零点时自动对齐业务日期：
+    //   18 日夜班 -> 19 日白班  ⇒ 日期推进到今天
+    //   19 日白班 -> 回看夜班    ⇒ 日期回退到昨天
+    // 12:00 之后白/夜互换则保持同一业务日不变。
     function toggleShiftMode() {
       if (currentUser.role === 'viewer') {
         showToast('⚠️ 权限拦截：当前为只读观察员，无权切换班次配置！');
@@ -4060,17 +4141,47 @@
         showToast('⚠️ 历史台账不支持翻转班型，请使用日期 / 班次选择器查阅目标班次。');
         return;
       }
-      if (!apiReady || !currentShift) {
+      if (!apiReady) {
         showToast('⚠️ 当班数据尚未加载，请稍后重试');
         return;
       }
-      apiRequest(`/api/v1/shifts/${currentShift.id}/switch-type`, {
+      // 以当前视图的班次标签为准（跨零点业务日下 isDayShift 可能滞后于实际台账）
+      const currentLabel = viewingShiftLabel || (isDayShift ? '白班' : '夜班');
+      const nextKey = currentLabel === '夜班' ? 'day' : 'night';
+      const nextLabel = nextKey === 'night' ? '夜班' : '白班';
+      const now = new Date();
+      const todayStr = formatDateYMD(now);
+      const yesterdayStr = shiftDateByDays(todayStr, -1);
+      const isMorning = toBeijingParts(now).hh < '12';
+      const currentBusinessDate = displayShiftDate();
+      let targetDate = currentBusinessDate;
+
+      if (isMorning) {
+        if (nextKey === 'day' && currentBusinessDate === yesterdayStr) {
+          targetDate = todayStr;          // 场景 A：早间夜班交白班 -> 推进到今天
+        } else if (nextKey === 'night' && currentBusinessDate === todayStr) {
+          targetDate = yesterdayStr;      // 场景 B：早间白班回看夜班 -> 回退到昨天
+        }
+      }
+
+      apiRequest('/shifts/switch-operational', {
         method: 'POST',
-        body: { shift_type: isDayShift ? 'night' : 'day' }
+        body: { shift_type: nextKey }
       }).then(() => {
-        isDayShift = !isDayShift;
+        isDayShift = nextKey === 'day';
+        explicitDutySelection = { dateStr: targetDate, label: nextLabel };
+        viewingDate = targetDate;
+        viewingShiftLabel = nextLabel;
+        isViewingToday = true;
+        currentShiftRecord = null;
+        const typePicker = document.getElementById('shiftTypePicker');
+        if (typePicker) typePicker.value = nextLabel;
+        const datePicker = document.getElementById('shiftDatePicker');
+        if (datePicker) datePicker.value = targetDate;
         updateShiftBannerTime();
-        showToast(isDayShift ? '已切换为夜班模式 (17:30 ~ 次日 08:00，共5次巡查)' : '已切换为白班模式 (08:00 ~ 17:30，共3次巡查)');
+        showToast(isDayShift
+          ? `已切换为 ${formatShiftDate(targetDate)} 白班 (08:00 ~ 17:30，共3次巡查)`
+          : `已切换为 ${formatShiftDate(targetDate)} 夜班 (17:30 ~ 次日 08:00，共5次巡查)`);
         return refreshAllData();
       }).catch(err => showToast(`⚠️ ${err.message}`));
       return;
@@ -4236,9 +4347,6 @@
       if (signerCurr) signerCurr.value = `${leader} (值班长) + ${op} (值班员) + ${student} (学生)`;
 
       updateLogAuthorDropdown(leader, op, student);
-
-      const pdfPair = document.getElementById('pdfSignPair');
-      if (pdfPair) pdfPair.innerText = `${leader} (值班长)、${op} (值班员)、${student} (学生)`;
     }
 
     function updateLogAuthorDropdown(leader, op, student) {
@@ -4406,81 +4514,194 @@
     // ==========================================
     // 1. 每 3 小时例行巡检卡槽业务逻辑 (支持选择巡检人与角色权限感知)
     // ==========================================
+    const DAY_SLOT_TIMES = ['09:00', '12:00', '15:00'];
+    const NIGHT_SLOT_TIMES = ['18:00', '21:00', '00:00', '03:00', '06:00'];
+
+    function standardSlotTimes(label) {
+      return (label === '夜班' || (!label && !isDayShift)) ? NIGHT_SLOT_TIMES : DAY_SLOT_TIMES;
+    }
+
+    function ensureStandardSlots(slots, label) {
+      const expected = standardSlotTimes(label);
+      const source = Array.isArray(slots) ? slots : [];
+      const byTime = new Map();
+      source.forEach(slot => {
+        const key = String(slot.slot_time || slot.time || '').slice(0, 5);
+        if (key && !byTime.has(key)) byTime.set(key, slot);
+      });
+      return expected.map(time => {
+        const found = byTime.get(time);
+        if (found) {
+          return {
+            ...found,
+            time: found.time || found.slot_time || time,
+            slot_time: found.slot_time || found.time || time,
+            checker: found.checker || found.inspector || '--',
+            checkedAt: found.checkedAt || found.checked_at || '--',
+            checkedAtFull: found.checkedAtFull || found.checked_at_full || found.checkedAt || found.checked_at || '--',
+            status: found.status || 'pending'
+          };
+        }
+        return {
+          id: null,
+          time,
+          slot_time: time,
+          status: 'pending',
+          result: '待到点巡查',
+          remark: '',
+          checker: '--',
+          inspector: '',
+          checkedAt: '--',
+          checkedAtFull: '--',
+          tags: []
+        };
+      });
+    }
+
+    function escapeHtmlLite(value) {
+      return String(value == null ? '' : value)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+    }
+
+    function findSlotByKey(domKey) {
+      const target = String(domKey).replace(/-/g, ':');
+      return patrolSlots.find(slot => String(slot.id != null ? slot.id : slot.time).replace(/:/g, '-') === String(domKey))
+        || patrolSlots.find(slot => String(slot.time) === target);
+    }
+
+    function isSlotPending(slot) {
+      return !slot || slot.status === 'pending' || (!slot.status && !slot.checker);
+    }
+
+    function isSlotAbnormal(slot) {
+      return slot && (slot.status === 'anomaly' || slot.status === 'abnormal');
+    }
+
     function renderPatrolSlots() {
       const container = document.getElementById('patrolSlotsContainer');
       if (!container) return;
       container.innerHTML = '';
 
+      // 强兜底：无论后端返回什么，都按当前班次补齐标准卡槽，杜绝 0/0 空白
+      patrolSlots = ensureStandardSlots(patrolSlots, viewingShiftLabel || (isDayShift ? '白班' : '夜班'));
+
       let completedCount = 0;
       const staffList = getDutyStaffList();
       const shiftLocked = isShiftWriteLocked();
+      const historical = isHistoricalOrLocked();
+      const isAdmin = currentUser.role === 'admin';
       const isViewer = (currentUser.role === 'viewer') || shiftLocked;
+      const allowHistoricalEdit = historical && isAdmin;
 
       patrolSlots.forEach(slot => {
-        const isChecked = slot.status === 'checked';
-        const isAnomaly = slot.status === 'anomaly';
-        if (isChecked || isAnomaly) completedCount++;
+        const pending = isSlotPending(slot);
+        const isAnomaly = isSlotAbnormal(slot);
+        const isChecked = !pending && !isAnomaly;
+        if (!pending) completedCount++;
+
+        const domKey = String(slot.id != null ? slot.id : slot.time).replace(/:/g, '-');
+        const statusLabel = slot.status || 'pending';
+        const inspectorName = slot.checker && slot.checker !== '--' ? slot.checker : (slot.inspector || '--');
+        const checkedTime = historical
+          ? (slot.checkedAtFull || slot.checked_at_full || slot.checkedAt || slot.checked_at || '--')
+          : (slot.checkedAt || slot.checked_at || '--');
+        const remark = slot.remark || slot.result || '';
+        const tags = Array.isArray(slot.tags) ? slot.tags.filter(Boolean) : [];
 
         let borderClass = "border-slate-800 bg-slate-900/60";
         let statusBadge = `<span class="px-1.5 py-0.5 rounded text-[10px] bg-slate-800 text-slate-400">待打卡</span>`;
-        
+
         if (isChecked) {
           borderClass = "border-emerald-500/40 bg-emerald-950/20";
-          statusBadge = `<span class="px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">已核验无异常</span>`;
+          statusBadge = `<span class="px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">✅ 已核验无异常</span>`;
         } else if (isAnomaly) {
           borderClass = "border-rose-500/50 bg-rose-950/20";
-          statusBadge = `<span class="px-1.5 py-0.5 rounded text-[10px] font-bold bg-rose-500/20 text-rose-300 border border-rose-500/40">异常已上报</span>`;
+          statusBadge = `<span class="px-1.5 py-0.5 rounded text-[10px] font-bold bg-rose-500/20 text-rose-300 border border-rose-500/40">⚠️ 异常已上报</span>`;
+        } else if (historical && !isAdmin) {
+          borderClass = "border-slate-800 bg-slate-900/40 opacity-90";
+          statusBadge = `<span class="px-1.5 py-0.5 rounded text-[10px] bg-slate-800 text-slate-500 border border-slate-700">🔒 历史未打卡（只读）</span>`;
+        }
+
+        const tagHtml = tags.length
+          ? `<div class="flex flex-wrap gap-1 mt-1">${tags.map(tag => `<span class="px-1.5 py-0.5 rounded text-[10px] bg-amber-500/10 text-amber-300 border border-amber-500/30">${escapeHtmlLite(tag)}</span>`).join('')}</div>`
+          : '';
+
+        let actionHtml = '';
+        if (allowHistoricalEdit) {
+          actionHtml = `
+            <div class="mb-2">
+              <select id="slotChecker_${domKey}" class="w-full bg-slate-950 border border-slate-700 rounded px-2 py-1 text-xs text-sky-300 focus:outline-none focus:border-sky-500">
+                ${staffList.map(member => `<option value="${member.name}" ${member.role === '值班员' ? 'selected' : ''}>${member.name} (${member.role})</option>`).join('')}
+              </select>
+            </div>
+            ${pending ? `
+              <div class="grid grid-cols-2 gap-1.5">
+                <button onclick="submitShiftSlotCheckin('${slot.time}', false)" class="w-full bg-emerald-600/20 hover:bg-emerald-600/40 text-emerald-300 border border-emerald-500/40 text-[11px] py-1 rounded transition-colors font-semibold">
+                  补录正常打卡
+                </button>
+                <button onclick="submitShiftSlotCheckin('${slot.time}', true)" class="w-full bg-rose-600/20 hover:bg-rose-600/40 text-rose-300 border border-rose-500/40 text-[11px] py-1 rounded transition-colors">
+                  补录异常
+                </button>
+              </div>
+            ` : `
+              <div class="grid grid-cols-2 gap-1.5">
+                <button onclick="submitShiftSlotCheckin('${slot.time}', false)" class="w-full bg-sky-600/20 hover:bg-sky-600/40 text-sky-300 border border-sky-500/40 text-[11px] py-1 rounded transition-colors font-semibold">
+                  重核为正常
+                </button>
+                <button onclick="submitShiftSlotCheckin('${slot.time}', true)" class="w-full bg-amber-600/20 hover:bg-amber-600/40 text-amber-300 border border-amber-500/40 text-[11px] py-1 rounded transition-colors">
+                  改为异常
+                </button>
+              </div>
+            `}
+          `;
+        } else if (!isViewer) {
+          actionHtml = pending ? `
+            <div class="mb-2">
+              <select id="slotChecker_${domKey}" class="w-full bg-slate-950 border border-slate-700 rounded px-2 py-1 text-xs text-sky-300 focus:outline-none focus:border-sky-500">
+                ${staffList.map(member => `<option value="${member.name}" ${member.role === '值班员' ? 'selected' : ''}>${member.name} (${member.role})</option>`).join('')}
+              </select>
+            </div>
+            <div class="grid grid-cols-2 gap-1.5">
+              <button onclick="checkInNormalByKey('${domKey}')" class="w-full bg-emerald-600/20 hover:bg-emerald-600/40 text-emerald-300 border border-emerald-500/40 text-[11px] py-1 rounded transition-colors font-semibold">
+                未见异常
+              </button>
+              <button onclick="openPatrolAnomalyModalByKey('${domKey}', '${slot.time}')" class="w-full bg-rose-600/20 hover:bg-rose-600/40 text-rose-300 border border-rose-500/40 text-[11px] py-1 rounded transition-colors">
+                报异常
+              </button>
+            </div>
+          ` : `
+            <button onclick="resetPatrolSlotByKey('${domKey}')" class="w-full text-[10px] py-1 text-slate-500 hover:text-slate-300 transition-colors">
+              重新修改打卡
+            </button>
+          `;
+        } else {
+          actionHtml = historical
+            ? `<div class="py-1 text-center rounded bg-slate-950 border border-slate-800 text-[10px] text-slate-500 font-mono">${pending ? '🔒 历史未打卡（只读）' : '🔒 历史已归档（只读）'}</div>`
+            : `<div class="py-1 text-center rounded bg-slate-950 border border-slate-800 text-[10px] text-slate-400 font-mono">${pending ? '👁️ 只读模式（仅供查阅）' : '已存证归档'}</div>`;
         }
 
         const card = document.createElement('div');
         card.className = `p-3 rounded-xl border ${borderClass} flex flex-col justify-between transition-all`;
-
+        card.dataset.slotTime = slot.time;
         card.innerHTML = `
           <div>
-            <div class="flex items-center justify-between">
+            <div class="flex items-center justify-between gap-1">
               <span class="font-mono text-base font-bold ${isChecked ? 'text-emerald-400' : (isAnomaly ? 'text-rose-400' : 'text-sky-400')}">${slot.time} 巡查</span>
               ${statusBadge}
             </div>
-            <p class="text-xs text-slate-300 mt-2 min-h-[34px] leading-relaxed">${slot.result}</p>
+            <p class="text-xs text-slate-300 mt-2 min-h-[34px] leading-relaxed">${escapeHtmlLite(pending ? (historical ? '历史班次未打卡' : '待到点巡查') : remark)}</p>
+            ${tagHtml}
           </div>
 
           <div class="pt-2 mt-2 border-t border-slate-800/80">
             <div class="text-[10px] text-slate-500 flex justify-between mb-2">
-              <span>巡检人: ${slot.checker}</span>
-              <span>${slot.checkedAt}</span>
+              <span>巡检人: ${escapeHtmlLite(inspectorName)}</span>
+              <span>${escapeHtmlLite(checkedTime)}</span>
             </div>
-            ${!isChecked && !isAnomaly ? `
-              ${!isViewer ? `
-                <div class="mb-2">
-                  <div class="flex items-center justify-between text-[10px] text-slate-400 mb-1">
-                    <span>选择巡检人:</span>
-                  </div>
-                  <select id="slotChecker_${slot.id}" class="w-full bg-slate-950 border border-slate-700 rounded px-2 py-1 text-xs text-sky-300 focus:outline-none focus:border-sky-500">
-                    ${staffList.map(s => `<option value="${s.name}" ${s.role === '值班员' ? 'selected' : ''}>${s.name} (${s.role})</option>`).join('')}
-                  </select>
-                </div>
-                <div class="grid grid-cols-2 gap-1.5">
-                  <button onclick="checkInNormal('${slot.id}')" class="w-full bg-emerald-600/20 hover:bg-emerald-600/40 text-emerald-300 border border-emerald-500/40 text-[11px] py-1 rounded transition-colors font-semibold">
-                    未见异常
-                  </button>
-                  <button onclick="openPatrolAnomalyModal('${slot.id}', '${slot.time}')" class="w-full bg-rose-600/20 hover:bg-rose-600/40 text-rose-300 border border-rose-500/40 text-[11px] py-1 rounded transition-colors">
-                    报异常
-                  </button>
-                </div>
-              ` : `
-                <div class="py-1 text-center rounded bg-slate-950 border border-slate-800 text-[10px] text-slate-400 font-mono">
-                  ${shiftLocked ? '🔒 历史记录仅管理员可补录' : '👁️ 只读模式（仅供查阅）'}
-                </div>
-              `}
-            ` : `
-              ${!isViewer ? `
-                <button onclick="resetPatrolSlot('${slot.id}')" class="w-full text-[10px] py-1 text-slate-500 hover:text-slate-300 transition-colors">
-                  重新修改打卡
-                </button>
-              ` : `
-                <div class="text-[10px] text-center text-slate-600">已存证归档</div>
-              `}
-            `}
+            ${actionHtml}
           </div>
         `;
         container.appendChild(card);
@@ -4524,6 +4745,79 @@
       showToast(`【${slot.time} 例行巡查】[${chosenChecker}] 已完成“未见异常”打卡！已同步至日志底座。`);
     }
 
+    // 管理员按“日期 + 班次 + 标准时间槽”补录 / 重核历史巡检
+    async function submitShiftSlotCheckin(slotTime, anomaly, presetDetail, presetChecker) {
+      if (isShiftWriteLocked() || (isHistoricalOrLocked() && currentUser.role !== 'admin')) {
+        showToast(HISTORICAL_GUARD_TOAST);
+        return;
+      }
+      if (currentUser.role === 'viewer') {
+        showToast('⚠️ 权限拦截：只读人员不可修改巡检记录！');
+        return;
+      }
+      const domKey = String(slotTime).replace(/:/g, '-');
+      const select = document.getElementById('slotChecker_' + domKey);
+      const checker = presetChecker || (select ? select.value : (currentUser.name || '周科'));
+      let result = presetDetail || '现场巡查完成，靶站大厅及各重点区域未见异常。';
+      if (anomaly && !presetDetail) {
+        const detail = window.prompt('请输入补录的异常现象描述：', '');
+        if (detail === null) return;
+        if (!detail.trim()) {
+          showToast('⚠️ 请填写异常现象描述后再提交');
+          return;
+        }
+        result = detail.trim();
+      }
+      try {
+        const data = await apiRequest('/shift-data/checkin', {
+          method: 'POST',
+          body: {
+            shift_date: displayShiftDate(),
+            shift_type: viewingShiftLabel || (isDayShift ? '白班' : '夜班'),
+            slot_time: slotTime,
+            checker_name: checker,
+            result,
+            anomaly: Boolean(anomaly)
+          }
+        });
+        if (data && data.revision_version) {
+          currentShiftRecord = { ...(currentShiftRecord || {}), revision_version: data.revision_version, is_locked: true };
+        }
+        await loadShiftSnapshot(displayShiftDate(), viewingShiftLabel || (isDayShift ? '白班' : '夜班'));
+        showToast(anomaly
+          ? `已补录【${slotTime}】异常巡检，当前版本 v${shiftRevisionVersion()}`
+          : `已${isHistoricalOrLocked() ? '补录/重核' : '完成'}【${slotTime}】正常打卡，当前版本 v${shiftRevisionVersion()}`);
+      } catch (error) {
+        showToast(`⚠️ ${error.message}`);
+      }
+    }
+
+    function currentDutySlotByKey(domKey) {
+      const slot = findSlotByKey(domKey);
+      return slot && slot.id != null ? slot : null;
+    }
+
+    checkInNormalByKey = async function (domKey) {
+      if (isShiftWriteLocked()) return showToast(HISTORICAL_GUARD_TOAST);
+      if (currentUser.role === 'viewer') return showToast('⚠️ 权限拦截：只读人员不可执行巡检打卡！');
+      const slot = currentDutySlotByKey(domKey);
+      return checkInNormal(slot ? slot.id : String(domKey).replace(/-/g, ':'));
+    };
+
+    openPatrolAnomalyModalByKey = function (domKey, slotTime) {
+      if (isShiftWriteLocked()) return showToast(HISTORICAL_GUARD_TOAST);
+      if (currentUser.role === 'viewer') return showToast('⚠️ 权限拦截：只读人员不可上报异常！');
+      const slot = currentDutySlotByKey(domKey);
+      return openPatrolAnomalyModal(slot ? slot.id : domKey, slotTime);
+    };
+
+    resetPatrolSlotByKey = async function (domKey) {
+      if (isShiftWriteLocked()) return showToast(HISTORICAL_GUARD_TOAST);
+      if (currentUser.role === 'viewer') return showToast('⚠️ 权限拦截：只读人员不可重置打卡！');
+      const slot = currentDutySlotByKey(domKey);
+      return resetPatrolSlot(slot ? slot.id : domKey);
+    };
+
     let activeAnomalySlotId = null;
     let activeAnomalyChecker = null;
 
@@ -4537,7 +4831,7 @@
         return;
       }
       activeAnomalySlotId = slotId;
-      const checkerSelect = document.getElementById('slotChecker_' + slotId);
+      const checkerSelect = document.getElementById('slotChecker_' + String(slotId).replace(/:/g, '-'));
       activeAnomalyChecker = checkerSelect ? checkerSelect.value : (document.getElementById('operatorSelect')?.value || '王健威');
 
       document.getElementById('anomalySlotTime').value = `${slotTime} 现场例行巡查 (巡检人: ${activeAnomalyChecker})`;
@@ -4627,7 +4921,7 @@
         activePending.status = 'checked';
         activePending.result = `现场巡查未见异常，${tagText}`;
         activePending.checker = op;
-        activePending.checkedAt = new Date().toTimeString().split(' ')[0].substring(0, 5);
+        activePending.checkedAt = getLocalBeijingTimeStr();
         renderPatrolSlots();
         showToast(`已将标签快捷应用至【${activePending.time} 巡查】(${op})！`);
       } else {
@@ -4654,6 +4948,11 @@
         .replace(/"/g, '&quot;');
     }
 
+    // 北京时间墙钟 -> 绝对毫秒：与浏览器所在时区无关
+    function beijingWallToMs(year, month, day, hour, minute, second) {
+      return Date.UTC(year, month - 1, day, hour, minute, second || 0) - CN_OFFSET_MS;
+    }
+
     // 业务时间字符串解析：支持 YYYY-MM-DD HH:mm / MM-DD HH:mm / HH:mm
     function todoParseClock(value, nowRef) {
       if (value === null || value === undefined || value === '') return NaN;
@@ -4663,11 +4962,12 @@
       const now = nowRef || new Date();
       const raw = String(value).trim().replace(/\//g, '-');
       if (!raw) return NaN;
+      const nowP = toBeijingParts(now) || toBeijingParts(new Date());
 
       // 1) 带 4 位年份：YYYY-MM-DD [HH:mm[:ss]]
       const full = raw.match(/^(\d{4})-(\d{1,2})-(\d{1,2})(?:[ T](\d{1,2}):(\d{2})(?::(\d{2}))?)?/);
       if (full) {
-        const ts = new Date(+full[1], +full[2] - 1, +full[3], +(full[4] || 0), +(full[5] || 0), +(full[6] || 0)).getTime();
+        const ts = beijingWallToMs(+full[1], +full[2], +full[3], +(full[4] || 0), +(full[5] || 0), +(full[6] || 0));
         if (!isNaN(ts)) return ts;
       }
 
@@ -4676,16 +4976,16 @@
       if (short) {
         const month = +short[1];
         const day = +short[2];
-        let year = now.getFullYear();
-        if (now.getMonth() === 0 && month === 12) year -= 1;
-        const ts = new Date(year, month - 1, day, +(short[3] || 0), +(short[4] || 0), 0, 0).getTime();
+        let year = +nowP.Y;
+        if (+nowP.M === 1 && month === 12) year -= 1;
+        const ts = beijingWallToMs(year, month, day, +(short[3] || 0), +(short[4] || 0), 0);
         if (!isNaN(ts)) return ts;
       }
 
       // 3) 仅时分：HH:mm（视为当天）
       const clock = raw.match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?$/);
       if (clock) {
-        return new Date(now.getFullYear(), now.getMonth(), now.getDate(), +clock[1], +clock[2], +(clock[3] || 0)).getTime();
+        return beijingWallToMs(+nowP.Y, +nowP.M, +nowP.D, +clock[1], +clock[2], +(clock[3] || 0));
       }
 
       return NaN;
@@ -4696,10 +4996,15 @@
       if (!value) return NaN;
       const raw = String(value).trim();
       if (!/^\d{4}-\d{2}-\d{2}/.test(raw)) return NaN;
-      const normalized = /^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}(:\d{2})?$/.test(raw)
-        ? `${raw.replace(' ', 'T')}Z`
-        : raw.replace(' ', 'T');
-      const ts = new Date(normalized).getTime();
+      // 后端统一返回北京时间 naive 字符串，按 UTC+8 墙钟折算，与浏览器时区无关；
+      // 早期给裸时间补 Z 会被当成 UTC 再回退 8 小时，导致留存窗口误判。
+      if (/Z$|[+-]\d{2}:?\d{2}$/.test(raw)) {
+        const ts = new Date(raw.replace(' ', 'T')).getTime();
+        return isNaN(ts) ? NaN : ts;
+      }
+      const m = raw.match(/^(\d{4})-(\d{1,2})-(\d{1,2})(?:[ T](\d{1,2}):(\d{2})(?::(\d{2}))?)?/);
+      if (!m) return NaN;
+      const ts = beijingWallToMs(+m[1], +m[2], +m[3], +(m[4] || 0), +(m[5] || 0), +(m[6] || 0));
       return isNaN(ts) ? NaN : ts;
     }
 
@@ -4743,12 +5048,12 @@
       const raw = String(value == null ? '' : value).trim();
       if (!raw) return '--';
 
-      // 带时区信息的 ISO 串按浏览器本地时区展示
+      // 带时区信息的 ISO 串：按北京时间（UTC+8）展示，不受浏览器时区影响
       if (/Z$|[+-]\d{2}:?\d{2}$/.test(raw)) {
         const ts = new Date(raw).getTime();
         if (!isNaN(ts)) {
-          const d = new Date(ts);
-          return `${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+          const p = toBeijingParts(new Date(ts));
+          if (p) return `${p.M}-${p.D} ${p.hh}:${p.mm}`;
         }
       }
 
@@ -4862,8 +5167,8 @@
       const item = shiftTodos.find(t => t.id === id);
       if (item) {
         item.done = !item.done;
-        item.doneAt = item.done ? formatTodoTime(new Date().toISOString()) : '';
-        item.completedAt = item.done ? new Date().toISOString() : '';
+        item.doneAt = item.done ? formatTodoTime(getLocalBeijingDateTimeStr()) : '';
+        item.completedAt = item.done ? getLocalBeijingDateTimeStr() : '';
         item.completedBy = item.done ? (currentUser.name || '值班员') : '';
         if (!item.done) item.carriedOver = false;
         renderTodos();
@@ -4913,135 +5218,439 @@
     // ==========================================
     // 3. 规范 A4 PDF 导出
     // ==========================================
-    function exportShiftPDF() {
-      const now = new Date();
-      const timeStr = now.toLocaleTimeString('zh-CN');
-      // 导出日期与班次以当前查看的台账为准（历史回溯时不得误用“今天”）
+    // ==========================================
+    // 3-2. A4 仿真预览 → 确认下载 / 浏览器打印闭环
+    // ==========================================
+    const SHIFT_PDF_WEEKDAYS = ['星期日', '星期一', '星期二', '星期三', '星期四', '星期五', '星期六'];
+
+    function shiftPdfContext() {
       const exportDate = displayShiftDate();
-      const dateStr = exportDate;
       const shiftLabel = viewingShiftLabel || (isDayShift ? '白班' : '夜班');
       const revisionVersion = shiftRevisionVersion();
+      const leader = document.getElementById('leaderSelect')?.value || '';
+      const operatorName = document.getElementById('operatorSelect')?.value || '';
+      const studentInput = document.getElementById('studentInput');
+      const student = (studentInput && studentInput.value.trim()) ? studentInput.value.trim() : currentStudent;
+      const mode = document.getElementById('beamModeSelect')?.value || '供束打靶';
       const isRevised = revisionVersion > 1;
+      return {
+        exportDate,
+        shiftLabel,
+        revisionVersion,
+        isRevised,
+        leader,
+        operatorName,
+        student,
+        mode,
+        filename: `靶站谱仪运行值班记录_${exportDate}_${shiftLabel}${isRevised ? `_修订版v${revisionVersion}` : ''}`
+      };
+    }
 
-      const leader = document.getElementById('leaderSelect').value;
-      const op = document.getElementById('operatorSelect').value;
-      const studentInp = document.getElementById('studentInput');
-      const student = (studentInp && studentInp.value.trim()) ? studentInp.value.trim() : currentStudent;
-      const mode = document.getElementById('beamModeSelect').value;
+    function shiftPdfCellBase(extra) {
+      return `border: 1px solid #000; padding: 4px; word-break: break-all; ${extra || ''}`;
+    }
 
-      const weekday = ['星期日','星期一','星期二','星期三','星期四','星期五','星期六'][new Date(`${exportDate}T00:00:00`).getDay()];
-      document.getElementById('pdfDate').innerText = `${formatShiftDate(exportDate) || exportDate}${Number.isNaN(new Date(`${exportDate}T00:00:00`).getTime()) ? '' : ` (${weekday})`}`;
-      document.getElementById('pdfShiftName').innerText = shiftLabel === '夜班' ? "夜班 (17:30 ~ 次日 08:00)" : "白班 (08:00 ~ 17:30)";
-      const reportTitleEl = document.getElementById('pdfReportTitle');
-      if (reportTitleEl) {
-        reportTitleEl.innerText = isRevised
-          ? `靶站谱仪运行值班记录（修订版 v${revisionVersion}）`
-          : '靶站谱仪运行值班记录';
-      }
-      const revisionTrace = document.getElementById('pdfRevisionTrace');
-      if (revisionTrace) {
-        if (isRevised) {
-          revisionTrace.classList.remove('hidden');
-          revisionTrace.innerText = `修订留痕：由系统管理员 [${currentShiftRecord?.last_revised_by || '未记录'}] 于 ${currentShiftRecord?.last_revised_at || '未记录'} 修订更正（当前第 v${revisionVersion} 版）`;
-        } else {
-          revisionTrace.classList.add('hidden');
-          revisionTrace.innerText = '';
-        }
-      }
-      document.getElementById('pdfLeader').innerText = leader;
-      document.getElementById('pdfOperator').innerText = `${op} (坐班: ${student})`;
-      document.getElementById('pdfMode').innerText = mode === '供束打靶' ? "加速器 200kW, 25Hz 供束打靶，谱仪正常实验" : "停机维护，无束流";
+    // 统一文件名规则：靶站谱仪运行值班记录_日期_班次[_修订版vN].pdf
+    function buildShiftPdfFileName() {
+      const ctx = shiftPdfContext();
+      return `${ctx.filename}.pdf`;
+    }
 
-      const pTbody = document.getElementById('pdfPatrolTableBody');
-      pTbody.innerHTML = '';
-      patrolSlots.forEach(slot => {
-        const tr = document.createElement('tr');
-        tr.innerHTML = `
-          <td style="border: 1px solid #000; padding: 4px; text-align: center; font-weight: bold;">${slot.time}</td>
-          <td style="border: 1px solid #000; padding: 4px; text-align: center; color: ${slot.status === 'checked' ? '#060' : (slot.status === 'anomaly' ? '#900' : '#666')}">${slot.status === 'checked' ? '已核验无异常' : (slot.status === 'anomaly' ? '异常已登记' : '待到点巡查')}</td>
-          <td style="border: 1px solid #000; padding: 4px; word-break: break-all;">${slot.result}</td>
-          <td style="border: 1px solid #000; padding: 4px; text-align: center;">${slot.checker}</td>
-        `;
-        pTbody.appendChild(tr);
-      });
+    // 统一生成 A4 报表 HTML：与预览、下载、打印共用同一份数据快照
+    function populateShiftPdfPreviewSheet() {
+      const sheet = document.getElementById('pdfPreviewPaperSheet');
+      if (!sheet) return null;
+      const ctx = shiftPdfContext();
+      const { exportDate, shiftLabel, revisionVersion, isRevised } = ctx;
 
-      const tTbody = document.getElementById('pdfTodoTableBody');
-      tTbody.innerHTML = '';
-      getVisibleTodos().forEach(td => {
-        const tr = document.createElement('tr');
-        tr.innerHTML = `
-          <td style="border: 1px solid #000; padding: 4px; text-align: center; font-weight: bold;">${formatTodoTime(td.time)}</td>
-          <td style="border: 1px solid #000; padding: 4px; text-align: center;">${td.done ? `<span style="color:#060; font-weight:bold;">已落实完成 (${td.completedBy || '值班员'})</span>` : (td.carriedOver ? '<span style="color:#a60;">待办流转中 (跨班继承)</span>' : '<span style="color:#a60;">待办流转中</span>')}</td>
-          <td style="border: 1px solid #000; padding: 4px; word-break: break-all;">${td.text}</td>
-        `;
-        tTbody.appendChild(tr);
-      });
+      const weekdayIndex = new Date(`${exportDate}T00:00:00`).getDay();
+      const weekday = Number.isNaN(weekdayIndex) ? '' : ` (${SHIFT_PDF_WEEKDAYS[weekdayIndex]})`;
+      const reportTitle = isRevised
+        ? `靶站谱仪运行值班记录（修订版 v${revisionVersion}）`
+        : '靶站谱仪运行值班记录';
+      const shiftWindow = shiftLabel === '夜班' ? '夜班 (17:30 ~ 次日 08:00)' : '白班 (08:00 ~ 17:30)';
+      const modeText = ctx.mode === '供束打靶'
+        ? '加速器 200kW, 25Hz 供束打靶，谱仪正常实验'
+        : '停机维护，无束流';
+      const forecastText = beamForecast && beamForecast.type
+        ? `${escapePdfText(beamForecast.type)}：${escapePdfText(formatTimeRangeDisplay(beamForecast.startTime, beamForecast.endTime))} · ${escapePdfText(beamForecast.note || '')}`
+        : '暂无后续维护预告';
 
-      const lTbody = document.getElementById('pdfLogTableBody');
-      lTbody.innerHTML = '';
-      shiftLogs.slice(0, 10).forEach(lg => {
-        const tr = document.createElement('tr');
-        tr.innerHTML = `
-          <td style="border: 1px solid #000; padding: 4px; font-family: monospace; text-align: center;">${lg.time}</td>
-          <td style="border: 1px solid #000; padding: 4px; font-weight: bold;">${lg.target}</td>
-          <td style="border: 1px solid #000; padding: 4px; word-break: break-all;">${lg.content}</td>
-          <td style="border: 1px solid #000; padding: 4px; text-align: center;">${lg.status} (${lg.author})</td>
-        `;
-        lTbody.appendChild(tr);
-      });
-
-      const mockHash = Math.random().toString(36).substring(2, 10).toUpperCase() + '-' + Date.now().toString(16).toUpperCase();
-      document.getElementById('pdfSecurityHash').innerText = mockHash;
-      document.getElementById('pdfExportTimestamp').innerText = `${dateStr} ${timeStr}`;
-      document.getElementById('pdfSignPair').innerText = `${leader} (值班长)、${op} (值班员)、${student} (学生)`;
-
-      const printWrapper = document.getElementById('pdfPrintWrapper');
-      const element = document.getElementById('printableShiftReport');
-      const reportBaseName = `靶站谱仪运行值班记录_${dateStr}_${shiftLabel}${isRevised ? `_修订版v${revisionVersion}` : ''}`;
-
-      printWrapper.style.display = 'block';
-
-      const opt = {
-        margin: [10, 10, 10, 10],
-        filename: `${reportBaseName}.pdf`,
-        image: { type: 'jpeg', quality: 0.98 },
-        html2canvas: { 
-          scale: 2, 
-          useCORS: true, 
-          letterRendering: true,
-          width: 750,
-          windowWidth: 750,
-          scrollX: 0,
-          scrollY: 0,
-          x: 0
-        },
-        jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
+      const renderPatrolRows = () => {
+        const slots = ensureStandardSlots(patrolSlots, shiftLabel);
+        return slots.map(slot => {
+          const pending = isSlotPending(slot);
+          const abnormal = isSlotAbnormal(slot);
+          const statusText = abnormal ? '异常已登记' : (pending ? '待到点巡查' : '已核验无异常');
+          const color = abnormal ? '#900' : (pending ? '#666' : '#060');
+          const remark = pending ? (isHistoricalOrLocked() ? '历史班次未打卡' : '待到点巡查') : (slot.remark || slot.result || '--');
+          const tags = Array.isArray(slot.tags) ? slot.tags.filter(Boolean) : [];
+          const remarkText = tags.length ? `${remark}（${tags.join(' / ')}）` : remark;
+          const inspector = slot.checker && slot.checker !== '--' ? slot.checker : (slot.inspector || '--');
+          return `<tr>
+            <td style="${shiftPdfCellBase('text-align: center; font-weight: bold;')}">${escapePdfText(slot.time)}</td>
+            <td style="${shiftPdfCellBase(`text-align: center; color: ${color};`)}">${escapePdfText(statusText)}</td>
+            <td style="${shiftPdfCellBase()}">${escapePdfText(remarkText)}</td>
+            <td style="${shiftPdfCellBase('text-align: center;')}">${escapePdfText(inspector)}</td>
+          </tr>`;
+        }).join('');
       };
 
-      showToast('正在导出【靶站谱仪运行值班记录】...');
-
-      html2pdf().set(opt).from(element).save().then(() => {
-        printWrapper.style.display = 'none';
-        showToast('【靶站谱仪运行值班记录】PDF 导出成功，已下载到本地。');
-      }).catch(() => {
-        // 降级为浏览器原生打印：临时切换标题，确保“另存为 PDF”的默认文件名一致
-        const originalTitle = document.title;
-        document.title = reportBaseName;
-        const restoreTitle = () => {
-          document.title = originalTitle;
-          window.removeEventListener('afterprint', restoreTitle);
-        };
-        window.addEventListener('afterprint', restoreTitle);
-        try {
-          window.print();
-        } finally {
-          // 部分浏览器不触发 afterprint，兜底延迟恢复
-          setTimeout(() => {
-            printWrapper.style.display = 'none';
-            restoreTitle();
-          }, 1000);
+      const renderTodoRows = () => {
+        const todos = getVisibleTodos();
+        if (!todos.length) {
+          return `<tr><td colspan="3" style="${shiftPdfCellBase('text-align: center; color: #666;')}">本班暂无待办备忘记录</td></tr>`;
         }
+        return todos.map(td => {
+          const statusText = td.done
+            ? `已落实完成 (${td.completedBy || '值班员'})`
+            : (td.carriedOver ? '待办流转中 (跨班继承)' : '待办流转中');
+          const color = td.done ? '#060' : '#a60';
+          return `<tr>
+            <td style="${shiftPdfCellBase('text-align: center; font-weight: bold;')}">${escapePdfText(formatTodoTime(td.time))}</td>
+            <td style="${shiftPdfCellBase(`text-align: center; color: ${color};`)}">${escapePdfText(statusText)}</td>
+            <td style="${shiftPdfCellBase()}">${escapePdfText(td.text)}</td>
+          </tr>`;
+        }).join('');
+      };
+
+      const renderLogRows = () => {
+        const logs = (shiftLogs || []).slice(0, 12);
+        if (!logs.length) {
+          return `<tr><td colspan="4" style="${shiftPdfCellBase('text-align: center; color: #666;')}">本班暂无运行动态流水记录</td></tr>`;
+        }
+        return logs.map(lg => `<tr>
+          <td style="${shiftPdfCellBase('text-align: center; font-family: monospace; font-size: 10px; line-height: 1.35;')}">${escapePdfText(String(lg.time || '').replace(/\s+/, '\n')).replace(/\n/g, '<br>')}</td>
+          <td style="${shiftPdfCellBase('font-weight: bold;')}">${escapePdfText(lg.target)}</td>
+          <td style="${shiftPdfCellBase()}">${escapePdfText(lg.content)}</td>
+          <td style="${shiftPdfCellBase('text-align: center;')}">${escapePdfText(`${lg.status} (${lg.author})`)}</td>
+        </tr>`).join('');
+      };
+
+      const auditHash = Math.random().toString(36).substring(2, 10).toUpperCase() + '-' + Date.now().toString(16).toUpperCase();
+      const exportedAt = getLocalBeijingDateTimeStr();
+      const revisionTrace = isRevised
+        ? `<div style="border-top: 1px dashed #bbb; margin-top: 5px; padding-top: 5px; font-size: 10.5px; color: #900; font-weight: bold;">修订留痕：由系统管理员 [${escapePdfText(currentShiftRecord?.last_revised_by || '未记录')}] 于 ${escapePdfText(currentShiftRecord?.last_revised_at || '未记录')} 修订更正（当前第 v${revisionVersion} 版）</div>`
+        : '';
+
+      sheet.innerHTML = `
+        <div style="text-align: center; border-bottom: 2px solid #000; padding-bottom: 8px; margin-bottom: 12px;">
+          <h2 style="font-size: 20px; font-weight: bold; margin: 0; letter-spacing: 1.2px; color: #000;">${reportTitle}</h2>
+          <div style="font-size: 12px; color: #444; margin-top: 3px; font-family: 'Inter', sans-serif;">Target Station &amp; Spectrometer Daily Operations Duty Log</div>
+        </div>
+
+        <table style="width: 100%; border-collapse: collapse; border: 1.5px solid #000; font-size: 12px; margin-bottom: 12px; table-layout: fixed;">
+          <tr>
+            <td style="border: 1px solid #000; padding: 5px 8px; font-weight: bold; width: 14%; background: #f2f2f2; text-align: center;">值班日期</td>
+            <td style="border: 1px solid #000; padding: 5px 8px; width: 36%;">${escapePdfText(formatShiftDate(exportDate) || exportDate)}${weekday}</td>
+            <td style="border: 1px solid #000; padding: 5px 8px; font-weight: bold; width: 14%; background: #f2f2f2; text-align: center;">值班班次</td>
+            <td style="border: 1px solid #000; padding: 5px 8px; width: 36%;">${escapePdfText(shiftWindow)}</td>
+          </tr>
+          <tr>
+            <td style="border: 1px solid #000; padding: 5px 8px; font-weight: bold; background: #f2f2f2; text-align: center;">值班长</td>
+            <td style="border: 1px solid #000; padding: 5px 8px;">${escapePdfText(ctx.leader || '--')}</td>
+            <td style="border: 1px solid #000; padding: 5px 8px; font-weight: bold; background: #f2f2f2; text-align: center;">值班员</td>
+            <td style="border: 1px solid #000; padding: 5px 8px;">${escapePdfText(`${ctx.operatorName || '--'} (坐班: ${ctx.student || '--'})`)}</td>
+          </tr>
+          <tr>
+            <td style="border: 1px solid #000; padding: 5px 8px; font-weight: bold; background: #f2f2f2; text-align: center;">本班模式</td>
+            <td colspan="3" style="border: 1px solid #000; padding: 5px 8px; font-weight: bold; color: #003366;">${escapePdfText(modeText)}</td>
+          </tr>
+          <tr>
+            <td style="border: 1px solid #000; padding: 5px 8px; font-weight: bold; background: #f2f2f2; text-align: center;">维护预告</td>
+            <td colspan="3" style="border: 1px solid #000; padding: 5px 8px; color: #333;">${forecastText}</td>
+          </tr>
+        </table>
+
+        <div style="font-weight: bold; font-size: 13px; margin-bottom: 5px; color: #000;">【一、现场例行巡查记录表 (白班 3 次 / 夜班 5 次)】</div>
+        <table style="width: 100%; border-collapse: collapse; border: 1.5px solid #000; font-size: 11.5px; margin-bottom: 12px; table-layout: fixed;">
+          <thead style="background: #f7f7f7;">
+            <tr>
+              <th style="border: 1px solid #000; padding: 4px; width: 15%; text-align: center;">巡查时间</th>
+              <th style="border: 1px solid #000; padding: 4px; width: 20%; text-align: center;">核验状态</th>
+              <th style="border: 1px solid #000; padding: 4px; width: 50%; text-align: left;">现场征候与核验区域</th>
+              <th style="border: 1px solid #000; padding: 4px; width: 15%; text-align: center;">巡检人</th>
+            </tr>
+          </thead>
+          <tbody>${renderPatrolRows()}</tbody>
+        </table>
+
+        <div style="font-weight: bold; font-size: 13px; margin-bottom: 5px; color: #000;">【二、班次定时待办与琐事备忘落实情况】</div>
+        <table style="width: 100%; border-collapse: collapse; border: 1.5px solid #000; font-size: 11.5px; margin-bottom: 12px; table-layout: fixed;">
+          <thead style="background: #f7f7f7;">
+            <tr>
+              <th style="border: 1px solid #000; padding: 4px; width: 22%; text-align: center;">约定时间</th>
+              <th style="border: 1px solid #000; padding: 4px; width: 18%; text-align: center;">落实状态</th>
+              <th style="border: 1px solid #000; padding: 4px; width: 60%; text-align: left;">待办事项与执行结果</th>
+            </tr>
+          </thead>
+          <tbody>${renderTodoRows()}</tbody>
+        </table>
+
+        <div style="font-weight: bold; font-size: 13px; margin-bottom: 5px; color: #000;">【三、本班运行动态流水记事与处置】</div>
+        <table style="width: 100%; border-collapse: collapse; border: 1.5px solid #000; font-size: 11px; margin-bottom: 12px; table-layout: fixed;">
+          <thead style="background: #f7f7f7;">
+            <tr>
+              <th style="border: 1px solid #000; padding: 4px; width: 16%; text-align: center;">时间</th>
+              <th style="border: 1px solid #000; padding: 4px; width: 18%; text-align: left;">所属系统/谱仪</th>
+              <th style="border: 1px solid #000; padding: 4px; width: 52%; text-align: left;">处置记录与过程描述</th>
+              <th style="border: 1px solid #000; padding: 4px; width: 14%; text-align: center;">状态/闭环人</th>
+            </tr>
+          </thead>
+          <tbody>${renderLogRows()}</tbody>
+        </table>
+
+        <div style="border: 1.5px solid #000; padding: 8px 12px; background: #fafafa; font-size: 11.5px; box-sizing: border-box;">
+          <div style="display: flex; justify-content: space-between; margin-bottom: 5px; gap: 8px;">
+            <div><strong>交班双人签字：</strong> ${escapePdfText(`${ctx.leader || '--'} (值班长)、${ctx.operatorName || '--'} (值班员)、${ctx.student || '--'} (学生)`)}</div>
+            <div><strong>接班签章：</strong> ${escapePdfText('周科 (已核验)')}</div>
+          </div>
+          <div style="border-top: 1px dashed #bbb; padding-top: 5px; display: flex; justify-content: space-between; font-size: 10.5px; color: #555; gap: 8px;">
+            <span><strong>审计防伪戳 (SHA-256)：</strong> <code style="font-family: monospace;">${auditHash}</code></span>
+            <span><strong>生成时间：</strong> ${escapePdfText(exportedAt)}</span>
+          </div>
+          ${revisionTrace}
+        </div>
+      `;
+      return ctx;
+    }
+
+    function openShiftPdfPreview() {
+      if (!isCurrentDutyView() && !canAccessHistoryShift()) {
+        showToast('⚠️ 权限拦截：历史日期的值班记录仅允许系统管理员预览与导出！');
+        return;
+      }
+      if (currentUser.role === 'viewer') {
+        showToast('⚠️ 权限拦截：只读观察员无权预览或导出值班记录！');
+        return;
+      }
+      const modal = document.getElementById('modalShiftPdfPreview');
+      if (!modal) return;
+      const ctx = populateShiftPdfPreviewSheet();
+      if (!ctx) return;
+      const badge = document.getElementById('pdfPreviewMetaBadge');
+      if (badge) {
+        const versionText = ctx.isRevised ? `修订版 v${ctx.revisionVersion}` : `原始版 v${ctx.revisionVersion}`;
+        badge.innerText = `${ctx.exportDate} · ${ctx.shiftLabel} · ${versionText}`;
+        badge.className = ctx.isRevised
+          ? 'px-2 py-0.5 rounded text-[10px] font-mono bg-amber-500/20 text-amber-300 border border-amber-500/40'
+          : 'px-2 py-0.5 rounded text-[10px] font-mono bg-slate-800 text-sky-300 border border-slate-700';
+      }
+      modal.classList.remove('hidden');
+      modal.classList.add('flex');
+      const stage = document.getElementById('pdfPreviewStage');
+      if (stage) stage.scrollTop = 0;
+    }
+
+    function closeShiftPdfPreview() {
+      const modal = document.getElementById('modalShiftPdfPreview');
+      if (!modal) return;
+      modal.classList.add('hidden');
+      modal.classList.remove('flex');
+    }
+
+    function confirmDownloadShiftPdf() {
+      if (!isCurrentDutyView() && !canAccessHistoryShift()) {
+        showToast('⚠️ 权限拦截：历史日期的值班记录仅允许系统管理员预览与导出！');
+        return;
+      }
+      if (currentUser.role === 'viewer') {
+        showToast('⚠️ 权限拦截：只读观察员无权预览或导出值班记录！');
+        return;
+      }
+      const previewPaper = document.getElementById('pdfPreviewPaperSheet');
+      if (!previewPaper || !previewPaper.innerHTML.trim()) {
+        showToast('⚠️ 未找到可导出的值班记录预览内容');
+        return;
+      }
+      if (typeof html2pdf !== 'function') {
+        showToast('⚠️ PDF 导出组件未加载，请改用浏览器打印');
+        return;
+      }
+
+      const button = document.getElementById('btnConfirmShiftPdf');
+      if (button) button.disabled = true;
+
+      // 1. 全屏遮罩：既遮住左上角临时克隆层，也避免 Toast 被截进 PDF
+      const loadingMask = document.createElement('div');
+      loadingMask.id = 'pdfGeneratingMask';
+      loadingMask.style.cssText = 'position: fixed; inset: 0; background: rgba(9, 13, 22, 0.85); z-index: 99999; display: flex; flex-direction: column; align-items: center; justify-content: center; color: #38bdf8; font-size: 14px; font-weight: bold;';
+      loadingMask.innerHTML = '<div style="margin-bottom: 8px; font-size: 24px;">📄</div><div>正在生成标准 A4 排版 PDF，请稍候...</div>';
+      document.body.appendChild(loadingMask);
+
+      // 2. 深克隆预览纸张，剥离 flex/margin:auto 造成的负向坐标偏移
+      //    纸张本身按 210mm（标准 A4 宽度）排版，10mm 页边距内建为 padding，
+      //    这样 html2pdf 的 margin 必须为 0，否则会插入 .html2pdf__container 内边距，
+      //    导致画布从 x:0 起裁却漏掉左侧 15.9px（PDF 左偏、左半被切）。
+      const clone = previewPaper.cloneNode(true);
+      clone.id = 'pdfExportClonePaper';
+      clone.removeAttribute('class');
+      clone.style.cssText = [
+        'width: 210mm !important',
+        'max-width: 210mm !important',
+        'min-width: 210mm !important',
+        'margin: 0 !important',
+        'padding: 10mm !important',
+        'background: #ffffff !important',
+        'color: #0f172a !important',
+        'box-shadow: none !important',
+        'border: none !important',
+        'border-radius: 0 !important',
+        'transform: none !important',
+        'position: static !important',
+        'left: auto !important',
+        'top: auto !important',
+        'box-sizing: border-box !important',
+        'font-family: \'PingFang SC\', \'Microsoft YaHei\', sans-serif !important'
+      ].join('; ');
+
+      // 3. 克隆体内表格严格 100% 等宽自适应，避免列宽撑破 A4 边界
+      clone.querySelectorAll('table').forEach(tbl => {
+        tbl.style.width = '100%';
+        tbl.style.tableLayout = 'fixed';
+        tbl.style.borderCollapse = 'collapse';
       });
+      clone.querySelectorAll('td, th').forEach(cell => {
+        cell.style.wordBreak = 'break-all';
+        cell.style.whiteSpace = 'normal';
+        cell.style.boxSizing = 'border-box';
+      });
+
+      // 4. 挂载到紧贴视口左上角 (0,0) 的独立舞台
+      const staging = document.createElement('div');
+      staging.id = 'pdfExportStaging';
+      staging.style.cssText = 'position: fixed; top: 0; left: 0; width: 210mm; margin: 0; padding: 0; background: #ffffff; z-index: 99998; pointer-events: none; overflow: visible;';
+      staging.appendChild(clone);
+      document.body.appendChild(staging);
+
+      const fileName = buildShiftPdfFileName();
+      const opt = {
+        // 页边距必须为 0：10mm 已内建在克隆纸张的 padding 中。
+        // html2pdf 只要 margin 非 0 就会包一层带内边距的 container，
+        // 而 html2canvas 仍按 x:0 裁切，进而造成 PDF 内容整体左偏、左侧被切。
+        margin: 0,
+        filename: fileName,
+        image: { type: 'jpeg', quality: 0.98 },
+        html2canvas: {
+          scale: 2,
+          useCORS: true,
+          backgroundColor: '#ffffff',
+          scrollX: 0,
+          scrollY: 0,
+          // 截图克隆文档里把纸张舞台钉在文档原点，杜绝 fixed 定位带来的坐标偏移
+          onclone: (clonedDoc) => {
+            const clonedStage = clonedDoc.getElementById('pdfExportStaging');
+            if (clonedStage) {
+              clonedStage.style.position = 'absolute';
+              clonedStage.style.top = '0';
+              clonedStage.style.left = '0';
+              clonedStage.style.margin = '0';
+              clonedStage.style.padding = '0';
+              clonedStage.style.zIndex = '0';
+            }
+            const clonedPaper = clonedDoc.getElementById('pdfExportClonePaper');
+            if (clonedPaper) {
+              clonedPaper.style.position = 'static';
+              clonedPaper.style.margin = '0';
+              clonedPaper.style.left = 'auto';
+              clonedPaper.style.top = 'auto';
+              clonedPaper.style.transform = 'none';
+            }
+            clonedDoc.documentElement.style.background = '#ffffff';
+            clonedDoc.body.style.background = '#ffffff';
+            clonedDoc.body.style.margin = '0';
+          }
+        },
+        jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
+        pagebreak: { mode: ['avoid-all', 'css', 'legacy'] }
+      };
+
+      // 让遮罩先完成一次绘制，再开始截图
+      return new Promise(resolve => requestAnimationFrame(() => setTimeout(resolve, 60)))
+        .then(() => html2pdf().set(opt).from(clone).save())
+        .then(() => {
+          const modal = document.getElementById('modalShiftPdfPreview');
+          if (modal) {
+            modal.classList.add('hidden');
+            modal.classList.remove('flex');
+          }
+          showToast(`✅ 已成功导出标准 A4 值班记录：${fileName}`);
+        })
+        .catch((error) => {
+          console.error('shift pdf export failed:', error);
+          showToast('⚠️ PDF 生成异常，请尝试使用右上角【浏览器打印】另存为 PDF');
+        })
+        .finally(() => {
+          if (staging.parentNode) staging.parentNode.removeChild(staging);
+          if (loadingMask.parentNode) loadingMask.parentNode.removeChild(loadingMask);
+          if (button) button.disabled = false;
+        });
+    }
+
+    function printShiftPdfPreview() {
+      if (!isCurrentDutyView() && !canAccessHistoryShift()) {
+        showToast('⚠️ 权限拦截：历史日期的值班记录仅允许系统管理员预览与打印！');
+        return;
+      }
+      if (currentUser.role === 'viewer') {
+        showToast('⚠️ 权限拦截：只读观察员无权预览或打印值班记录！');
+        return;
+      }
+      const sheet = document.getElementById('pdfPreviewPaperSheet');
+      if (!sheet || !sheet.innerHTML.trim()) {
+        showToast('⚠️ 预览内容尚未生成，请重新打开预览');
+        return;
+      }
+      const ctx = shiftPdfContext();
+      const printWindow = window.open('', '_blank', 'width=900,height=1200');
+      if (!printWindow) {
+        showToast('⚠️ 打印窗口被浏览器拦截，请允许弹窗后重试');
+        return;
+      }
+      const originalTitle = document.title;
+      document.title = ctx.filename;
+      printWindow.document.open();
+      printWindow.document.write(`<!DOCTYPE html><html lang="zh-CN"><head><meta charset="utf-8"><title>${ctx.filename}</title>
+        <style>
+          @page { size: A4 portrait; margin: 10mm; }
+          html, body { margin: 0; padding: 0; background: #ffffff; }
+          body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+          #pdfPreviewPaperSheet {
+            width: 100% !important; max-width: 100% !important; min-height: auto !important;
+            margin: 0 !important; padding: 0 !important;
+            box-shadow: none !important; border: none !important; border-radius: 0 !important;
+            background: #ffffff !important; color: #000000 !important;
+          }
+          #pdfPreviewPaperSheet table { width: 100% !important; table-layout: fixed !important; border-collapse: collapse !important; }
+          #pdfPreviewPaperSheet td, #pdfPreviewPaperSheet th { word-break: break-all; white-space: normal; box-sizing: border-box; }
+          tr, table { page-break-inside: avoid; break-inside: avoid; }
+        </style></head><body>${sheet.outerHTML}</body></html>`);
+      printWindow.document.close();
+      const restoreTitle = () => { document.title = originalTitle; };
+      const triggerPrint = () => {
+        try {
+          if (typeof printWindow.focus === 'function') printWindow.focus();
+          printWindow.print();
+        } catch (error) {
+          showToast('⚠️ 打印窗口初始化失败，请稍后重试');
+          restoreTitle();
+        } finally {
+          // 原生打印为阻塞调用，返回后立即恢复页面标题
+          setTimeout(restoreTitle, 100);
+        }
+      };
+      printWindow.addEventListener?.('afterprint', restoreTitle);
+      if (printWindow.document.readyState === 'complete') {
+        setTimeout(triggerPrint, 120);
+      } else {
+        printWindow.onload = () => setTimeout(triggerPrint, 120);
+      }
+      showToast('已打开浏览器打印窗口，可在系统对话框中选择另存为 PDF');
+    }
+
+    // 兼容旧调用入口：统一走「预览 → 确认下载 / 打印」闭环，避免两套模板产生偏差
+    function exportShiftPDF() {
+      return openShiftPdfPreview();
     }
 
     // ==========================================
@@ -5195,9 +5804,10 @@
       const studentInp = document.getElementById('studentInput');
       const student = (studentInp && studentInp.value.trim()) ? studentInp.value.trim() : currentStudent;
 
-      document.getElementById('handoverTime').innerText = now.toLocaleString();
-      const handoverDate = `${now.getFullYear()}年${String(now.getMonth() + 1).padStart(2, '0')}月${String(now.getDate()).padStart(2, '0')}日`;
-      document.getElementById('modalShiftTypeDesc').innerText = isDayShift ? `${handoverDate} 白班 (08:00-17:30) → 今日夜班 (17:30-08:00)` : `${handoverDate} 夜班 (17:30-08:00) → 次日白班 (08:00-17:30)`;
+      document.getElementById('handoverTime').innerText = getLocalBeijingDateTimeStr(now);
+      const bp = toBeijingParts(now);
+      const handoverDate = `${bp.Y}年${bp.M}月${bp.D}日`;
+      document.getElementById('modalShiftTypeDesc').innerText = `值班日期 ${displayShiftDate()} · ${isDayShift ? '白班 (08:00-17:30)' : '夜班 (17:30-次日 08:00)'} → 接班班次按交接确认时间自动生成`;
       document.getElementById('handoverLeaderText').innerText = leader;
       document.getElementById('handoverOpText').innerText = `${op} (坐班: ${student})`;
 
@@ -5355,7 +5965,7 @@
       const op = document.getElementById('operatorSelect').value;
       const leader = document.getElementById('leaderSelect').value;
       document.getElementById('advOperatorDisplay').value = `${op} (复核:${leader})`;
-      document.getElementById('advTimeDisplay').value = new Date().toTimeString().split(' ')[0];
+      document.getElementById('advTimeDisplay').value = `${getLocalBeijingTimeStr()}:${String(new Date(Date.now() + CN_OFFSET_MS).getUTCSeconds()).padStart(2, '0')}`;
       document.getElementById('advProgressNotes').value = '';
 
       document.getElementById('modalAdvanceStage').classList.remove('hidden');
@@ -6301,7 +6911,7 @@
       const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
-      link.download = `CSNS_谱仪协助工作台账_${new Date().toISOString().slice(0, 10)}.csv`;
+      link.download = `CSNS_谱仪协助工作台账_${getLocalBeijingDateStr()}.csv`;
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
@@ -6794,16 +7404,95 @@
     let viewingShiftLabel = '';
     let isViewingToday = true;
     let currentShiftRecord = null;
+    // 用户显式切换/点选的目标班次（如早间夜班交白班推进到次日白班），
+    // 优先于“当前时刻业务日”推算，避免 hydrateFromBootstrap 把切换结果强行拉回。
+    let explicitDutySelection = null;
     const HISTORICAL_GUARD_TOAST = '⚠️ 权限拦截：历史值班记录及已交接班次仅允许系统管理员 (Admin) 修改！';
 
     function todayIsoDate() {
-      const now = new Date();
-      return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+      return getLocalBeijingDateStr();
+    }
+
+    // 历史班次回溯 / 导出仅系统管理员可用：普通角色永远停留在今日当班
+    function getTodayDateStr() {
+      return todayIsoDate();
+    }
+
+    function canAccessHistoryShift() {
+      return currentUser && currentUser.role === 'admin';
+    }
+
+    // 当前视图是否属于“今日当班”：活动批次跨零点时业务日期早于今日，仍属当班
+    function isCurrentDutyView() {
+      if (isViewingToday) return true;
+      if (currentShiftRecord && currentShiftRecord.is_today) return true;
+      // 兜底：业务日口径下的当班批次（含早间交接窗口的昨晚夜班）同样视为当班
+      return Boolean(currentShiftRecord && currentShiftRecord.shift_date
+        && isCurrentActiveDutyShift(currentShiftRecord.shift_date, currentShiftRecord.shift_type));
+    }
+
+    // 非管理员若因任何原因停留在历史视图，立即复位到今日当班
+    function enforceShiftHistoryAccess() {
+      if (canAccessHistoryShift()) return false;
+      // 今日当班（含跨零点夜班的在岗批次）允许停留
+      if (isCurrentDutyView()) return false;
+      viewingDate = '';
+      viewingShiftLabel = '';
+      isViewingToday = true;
+      currentShiftRecord = null;
+      resetToTodayShift(true);
+      return true;
+    }
+
+    // 统一刷新回溯日期控件、锁定提示与 PDF 导出按钮的权限态
+    function updateShiftHistoryPermissionUI() {
+      const todayStr = getTodayDateStr();
+      const isAdmin = canAccessHistoryShift();
+      const datePicker = document.getElementById('shiftDatePicker');
+      const wrapper = document.getElementById('historicalDatePickerWrapper');
+      const lockBadge = document.getElementById('historicalDateLockBadge');
+      const backBtn = document.getElementById('btnBackToTodayShift');
+      const exportBtn = document.getElementById('btnExportShiftPdf');
+
+      if (datePicker) {
+        datePicker.disabled = !isAdmin;
+        datePicker.max = todayStr;
+        // 显示业务日（早间交接时为前一天的夜班日期）
+        datePicker.value = displayShiftDate();
+        datePicker.title = isAdmin ? '可选择任意历史日期回溯查阅' : '历史记录仅系统管理员可查/导出';
+        datePicker.classList.toggle('opacity-50', !isAdmin);
+        datePicker.classList.toggle('cursor-not-allowed', !isAdmin);
+      }
+      const typePicker = document.getElementById('shiftTypePicker');
+      if (typePicker) {
+        typePicker.value = isDayShift ? '白班' : '夜班';
+        typePicker.title = isAdmin ? '可切换目标班次' : '值班员仅可查看今日当班班次';
+      }
+      if (wrapper) wrapper.classList.toggle('hidden', !isAdmin);
+      if (lockBadge) lockBadge.classList.toggle('hidden', isAdmin);
+      if (backBtn) backBtn.classList.toggle('hidden', isViewingToday || !isAdmin);
+
+      if (exportBtn) {
+        const blocked = currentUser.role === 'viewer' || (!isCurrentDutyView() && !isAdmin);
+        exportBtn.disabled = blocked;
+        exportBtn.classList.toggle('opacity-45', blocked);
+        exportBtn.classList.toggle('cursor-not-allowed', blocked);
+        exportBtn.title = blocked
+          ? (currentUser.role === 'viewer' ? '只读观察员无权导出值班记录 PDF' : '历史日期记录仅系统管理员可导出')
+          : '导出当前查看班次的值班记录 PDF';
+      }
     }
 
     function displayShiftDate() {
-      if (isViewingToday) return todayIsoDate();
-      return viewingDate || (currentShift ? currentShift.shift_date : todayIsoDate());
+      // 单一事实来源：当前视图已定位的批次（业务日 / 显式切换 / 后端在岗批次），
+      // 只有完全未定位时才回落到业务日推算。
+      // 跨零点夜班在次日早间仍显示前一天的日期，PDF 值班日期与文件名随之正确。
+      if (explicitDutySelection && explicitDutySelection.dateStr) {
+        return explicitDutySelection.dateStr;
+      }
+      if (viewingDate) return viewingDate;
+      if (isViewingToday) return getActiveOperationalContext().dateStr || todayIsoDate();
+      return currentShift ? currentShift.shift_date : todayIsoDate();
     }
 
     function isHistoricalOrLocked() {
@@ -6811,6 +7500,9 @@
         return Boolean(currentShiftRecord.is_locked);
       }
       const dateStr = viewingDate || (currentShift ? currentShift.shift_date : todayIsoDate());
+      const label = viewingShiftLabel || (isDayShift ? '白班' : '夜班');
+      // 业务日当班批次（如 19 日早上的 18 日夜班）不算历史归档
+      if (isCurrentActiveDutyShift(dateStr, label)) return false;
       return dateStr < todayIsoDate();
     }
 
@@ -6895,16 +7587,16 @@
       const datePicker = document.getElementById('shiftDatePicker');
       const typePicker = document.getElementById('shiftTypePicker');
 
-      if (datePicker) {
-        datePicker.max = todayIsoDate();
-        datePicker.value = displayShiftDate();
-      }
+      if (datePicker) datePicker.value = displayShiftDate();
       if (typePicker) {
         typePicker.value = viewingShiftLabel || (isDayShift ? '白班' : '夜班');
         // 今日当班班次由系统活动班次自动判定，避免与真实在岗批次不一致
-        typePicker.disabled = isViewingToday;
-        typePicker.title = isViewingToday ? '今日当班班次由系统在岗批次自动判定' : '';
-        typePicker.classList.toggle('opacity-60', isViewingToday);
+        const typeLocked = isViewingToday || !canAccessHistoryShift();
+        typePicker.disabled = typeLocked;
+        typePicker.title = !canAccessHistoryShift()
+          ? '历史班次仅系统管理员可查'
+          : (isViewingToday ? '今日当班班次由系统在岗批次自动判定' : '');
+        typePicker.classList.toggle('opacity-60', typeLocked);
       }
 
       [leaderSel, opSel, studentInp, beamModeSel].forEach(el => {
@@ -6969,10 +7661,23 @@
     }
 
     function applyShiftSnapshot(record, duty, slots, logs) {
+      // 普通角色兜底：任何通路把历史快照灌进界面，一律丢弃并回落到今日当班
+      if (!canAccessHistoryShift() && record && record.shift_date && !record.is_today
+          && record.shift_date !== getTodayDateStr()
+          && !isCurrentActiveDutyShift(record.shift_date, record.shift_type)) {
+        showToast('⚠️ 权限拦截：仅系统管理员允许回溯查询历史值班记录！');
+        setTimeout(() => { resetToTodayShift(true); }, 0);
+        return;
+      }
       currentShiftRecord = record || null;
       viewingDate = (record && record.shift_date) || viewingDate;
       viewingShiftLabel = (record && record.shift_type) || viewingShiftLabel;
       isViewingToday = Boolean(record && record.is_today);
+      // 加载到与显式选择不一致的批次时，显式选择失效（避免陈旧目标污染后续导航）
+      if (explicitDutySelection && record && (record.shift_date !== explicitDutySelection.dateStr
+          || record.shift_type !== explicitDutySelection.label)) {
+        explicitDutySelection = null;
+      }
       if (duty) {
         isDayShift = duty.shift_type === 'day';
       } else {
@@ -7014,9 +7719,15 @@
       renderTodos();
       renderShiftHistoryBanner();
       applyShiftLockUI();
+      updateShiftHistoryPermissionUI();
     }
 
     async function loadShiftSnapshot(dateStr, label) {
+      // 允许读取“今日”与当前业务日当班批次（含 00:00~09:30 的昨晚夜班）
+      if (dateStr !== getTodayDateStr() && !canAccessHistoryShift() && !isCurrentActiveDutyShift(dateStr, label)) {
+        showToast('⚠️ 权限拦截：仅系统管理员允许回溯查询历史值班记录！');
+        return false;
+      }
       try {
         const data = await apiRequest(`/shift-data?date=${encodeURIComponent(dateStr)}&shift=${encodeURIComponent(label)}`);
         applyShiftSnapshot(data.record, data.duty_shift, data.patrol_slots, data.logs);
@@ -7029,6 +7740,16 @@
 
     async function handleShiftDateChange(value) {
       if (!value) return;
+      const todayStr = getTodayDateStr();
+      const dutyLabel = document.getElementById('shiftTypePicker') ? document.getElementById('shiftTypePicker').value : (viewingShiftLabel || '白班');
+      // 业务日当班批次（早间交接的昨天夜班）对值班员一并放行
+      const dutyDateAllowed = isCurrentActiveDutyShift(value, dutyLabel);
+      if (value !== todayStr && !canAccessHistoryShift() && !dutyDateAllowed) {
+        const picker = document.getElementById('shiftDatePicker');
+        if (picker) picker.value = displayShiftDate();
+        showToast('⚠️ 权限拦截：仅系统管理员允许回溯查询历史值班记录！');
+        return;
+      }
       if (value === todayIsoDate()) {
         viewingDate = value;
         viewingShiftLabel = '';
@@ -7039,6 +7760,7 @@
       const label = document.getElementById('shiftTypePicker') ? document.getElementById('shiftTypePicker').value : viewingShiftLabel || '白班';
       viewingDate = value;
       viewingShiftLabel = label;
+      explicitDutySelection = { dateStr: value, label };
       const ok = await loadShiftSnapshot(value, label);
       if (ok) {
         const empty = currentShiftRecord && currentShiftRecord.is_empty;
@@ -7050,22 +7772,52 @@
     }
 
     async function handleShiftTypeChange(value) {
-      if (isViewingToday) return;
       const dateStr = document.getElementById('shiftDatePicker') ? document.getElementById('shiftDatePicker').value : viewingDate;
+      // 值班员可切换到当前业务日当班批次（早间交接的昨晚夜班 / 今晚夜班）
+      const isDutyTarget = Boolean(dateStr) && isCurrentActiveDutyShift(dateStr, value);
+      if (!canAccessHistoryShift() && !isDutyTarget) {
+        const typePicker = document.getElementById('shiftTypePicker');
+        if (typePicker) typePicker.value = isDayShift ? '白班' : '夜班';
+        showToast('⚠️ 权限拦截：普通角色仅可查看今日当班班次！');
+        return;
+      }
       if (!dateStr) return;
       const ok = await loadShiftSnapshot(dateStr, value);
-      if (ok) showToast(`已切换到 ${dateStr} · ${value} 值班台账`);
+      if (ok) {
+        isDayShift = value !== '夜班';
+        viewingDate = dateStr;
+        viewingShiftLabel = value;
+        explicitDutySelection = { dateStr, label: value };
+        isViewingToday = isDutyTarget || dateStr === getTodayDateStr();
+        updateShiftBannerTime();
+        updateShiftHistoryPermissionUI();
+        showToast(`已切换到 ${formatShiftDate(dateStr)} · ${value} 值班台账`);
+      }
     }
 
     async function resetToTodayShift(silent) {
+      // “今日当班”= 当前时刻的业务日班次：19 日早上 08:05 返回的是 18 日夜班
+      const ctx = getActiveOperationalContext();
       const datePicker = document.getElementById('shiftDatePicker');
       const typePicker = document.getElementById('shiftTypePicker');
-      if (datePicker) datePicker.value = '';
-      viewingDate = '';
+      explicitDutySelection = null;
+      viewingDate = ctx.dateStr;
+      viewingShiftLabel = ctx.shiftType;
+      isViewingToday = true;
+      currentShiftRecord = null;
+      isDayShift = ctx.isDayShift;
       try {
+        // 后端在岗批次才是权威：交接后它已切到接班班次，业务日推算只作兜底
         await refreshAllData();
-        if (typePicker) typePicker.value = isDayShift ? '白班' : '夜班';
-        if (!silent) showToast('已返回今日当班台账');
+        updateShiftChrome(currentShift);
+        const targetDate = viewingDate || ctx.dateStr;
+        const targetLabel = viewingShiftLabel || ctx.shiftType;
+        if (datePicker) datePicker.value = targetDate;
+        if (typePicker) typePicker.value = targetLabel;
+        await loadShiftSnapshot(targetDate, targetLabel);
+        updateShiftBannerTime();
+        updateShiftHistoryPermissionUI();
+        if (!silent) showToast(`已返回今日当班台账（${formatShiftDate(targetDate)} ${targetLabel}）`);
       } catch (error) {
         showToast(`⚠️ ${error.message}`);
       }
@@ -7080,7 +7832,8 @@
     }
 
     function hydrateFromBootstrap(data) {
-      const keepHistoryView = (isViewingToday === false && !!viewingDate);
+      // 仅管理员可保留历史回溯视图；普通角色始终回落到今日当班
+      const keepHistoryView = (isViewingToday === false && !!viewingDate && canAccessHistoryShift());
       const record = data.shift_record || (data.shift ? {
         shift_date: data.shift.shift_date,
         shift_type: data.shift.shift_label || (data.shift.shift_type === 'day' ? '白班' : '夜班'),
@@ -7097,10 +7850,23 @@
       } : null);
       if (!keepHistoryView) {
         currentShiftRecord = record;
-        if (record) {
-          viewingDate = record.shift_date;
-          viewingShiftLabel = record.shift_type;
+        // 初始化一律以业务日为准：夜班跨零点后仍定位到前一天的夜班台账
+        const ctx = getActiveOperationalContext();
+        // 用户显式切换/点选的班次优先于业务日推算（早间夜班交白班会推进到次日）。
+        const explicit = explicitDutySelection ? { ...explicitDutySelection } : null;
+        if (explicit) {
+          viewingDate = explicit.dateStr;
+          viewingShiftLabel = explicit.label;
+          isViewingToday = true;
+        } else if (record) {
+          // 后端返回的在岗批次即权威来源（跨零点夜班 / 交接后的次日白班都由它决定）
+          viewingDate = record.shift_date || ctx.dateStr;
+          viewingShiftLabel = record.shift_type || ctx.shiftType;
           isViewingToday = record.is_today !== false;
+        } else {
+          viewingDate = ctx.dateStr;
+          viewingShiftLabel = ctx.shiftType;
+          isViewingToday = true;
         }
         patrolSlots = data.patrol_slots || [];
         shiftLogs = (data.logs || []).map(log => ({
@@ -7126,8 +7892,17 @@
         applyShiftSnapshot(currentShiftRecord, null, patrolSlots, shiftLogs);
       } else {
         updateShiftChrome(data.shift);
-        if (record && record.is_today === false) {
+        const targetDate = viewingDate;
+        const targetLabel = viewingShiftLabel;
+        const recordMatchesTarget = Boolean(record && targetDate && targetLabel
+          && record.shift_date === targetDate && record.shift_type === targetLabel);
+        // 显式切换/业务日目标与后端活动批次不一致时，绝不能用活动批次的快照覆盖视图
+        isDayShift = targetLabel ? targetLabel !== '夜班' : isDayShift;
+        if (record && record.is_today === false && recordMatchesTarget) {
           applyShiftSnapshot(record, null, patrolSlots, shiftLogs);
+        }
+        if (targetDate && targetLabel && !recordMatchesTarget) {
+          setTimeout(() => { loadShiftSnapshot(targetDate, targetLabel); }, 0);
         }
       }
       applySessionUser(currentUser);
@@ -7182,6 +7957,7 @@
       renderAssistCategoryTabs();
       renderAssistTable();
       applyRolePermissions(currentUser.role);
+      updateShiftHistoryPermissionUI();
     }
 
     async function loadLogTargets() {
@@ -7281,15 +8057,22 @@
       if (isShiftWriteLocked()) return showToast(HISTORICAL_GUARD_TOAST);
       if (currentUser.role === 'viewer') return showToast('⚠️ 权限拦截：只读人员不可执行巡检打卡！');
       if (!requireApiWrite()) return;
-      const slot = patrolSlots.find(item => String(item.id) === String(slotId));
-      const checkerSelect = document.getElementById('slotChecker_' + slotId);
+      const slot = patrolSlots.find(item => String(item.id) === String(slotId))
+        || patrolSlots.find(item => String(item.time) === String(slotId));
+      // 历史台账或占位卡槽（无数据库 id）走“日期 + 班次 + 时间槽”补录接口
+      if (isHistoricalOrLocked() || !slot || slot.id == null) {
+        return submitShiftSlotCheckin(slot ? slot.time : String(slotId), false);
+      }
+      const domKey = String(slot.id).replace(/:/g, '-');
+      const checkerSelect = document.getElementById('slotChecker_' + domKey);
       const checker = checkerSelect ? checkerSelect.value : (document.getElementById('operatorSelect')?.value || currentUser.name);
       try {
-        await apiRequest(`/patrol-slots/${slotId}/checkin`, {
+        await apiRequest(`/patrol-slots/${slot.id}/checkin`, {
           method: 'POST',
           body: { checker_name: checker, result: '现场巡查完成，靶站大厅及各重点区域未见异常。' }
         });
-        await refreshAllData();
+        await reloadShiftView();
+        renderPatrolSlots();
         showToast(`【${slot?.time || ''} 例行巡查】[${checker}] 已完成“未见异常”打卡并持久化`);
       } catch (error) {
         showToast(`⚠️ ${error.message}`);
@@ -7301,14 +8084,21 @@
       const content = document.getElementById('anomalyContent').value.trim();
       if (!content) return showToast('请输入巡查发现的异常描述！');
       const checker = activeAnomalyChecker || document.getElementById('operatorSelect')?.value || currentUser.name;
+      const targetSlot = patrolSlots.find(item => String(item.id) === String(activeAnomalySlotId))
+        || patrolSlots.find(item => String(item.time) === String(activeAnomalySlotId));
+      if (isHistoricalOrLocked() || !targetSlot || targetSlot.id == null) {
+        closePatrolAnomalyModal();
+        return submitShiftSlotCheckin(targetSlot ? targetSlot.time : String(activeAnomalySlotId), true, content, checker);
+      }
       try {
-        const data = await apiRequest(`/patrol-slots/${activeAnomalySlotId}/anomaly`, {
+        const data = await apiRequest(`/patrol-slots/${targetSlot.id}/anomaly`, {
           method: 'POST',
           body: { checker_name: checker, description: content }
         });
         closePatrolAnomalyModal();
-        await refreshAllData();
-        showToast(`巡检异常已登记，并自动派生工单 [${data.event.id}]`);
+        await reloadShiftView();
+        renderPatrolSlots();
+        showToast(`巡检异常已登记，并自动派生工单 [${data.event.event_no || data.event.id}]`);
       } catch (error) {
         showToast(`⚠️ ${error.message}`);
       }
@@ -7317,9 +8107,16 @@
     resetPatrolSlot = async function (slotId) {
       if (isShiftWriteLocked()) return showToast(HISTORICAL_GUARD_TOAST);
       if (currentUser.role === 'viewer') return showToast('⚠️ 权限拦截：只读人员不可重置打卡！');
+      const slot = patrolSlots.find(item => String(item.id) === String(slotId))
+        || patrolSlots.find(item => String(item.time) === String(slotId));
+      if (!slot || slot.id == null) {
+        showToast('该卡槽尚未落库，无需重置');
+        return;
+      }
       try {
-        await apiRequest(`/patrol-slots/${slotId}/reset`, { method: 'POST' });
-        await refreshAllData();
+        await apiRequest(`/patrol-slots/${slot.id}/reset`, { method: 'POST' });
+        await reloadShiftView();
+        renderPatrolSlots();
         showToast('已重置该巡查打卡槽状态');
       } catch (error) {
         showToast(`⚠️ ${error.message}`);
@@ -7329,20 +8126,25 @@
     insertQuickTag = async function (tagText) {
       if (isShiftWriteLocked()) return showToast(HISTORICAL_GUARD_TOAST);
       if (currentUser.role === 'viewer') return showToast('⚠️ 权限拦截：只读人员不可插入标签打卡！');
-      const pending = patrolSlots.find(item => item.status === 'pending');
+      const pending = patrolSlots.find(item => isSlotPending(item));
       if (!pending) {
         const input = document.getElementById('logContent');
         if (input) input.value += (input.value ? '，' : '') + tagText;
         return showToast('已追加标签至登记表单');
       }
-      const checkerSelect = document.getElementById('slotChecker_' + pending.id);
+      const domKey = String(pending.id != null ? pending.id : pending.time).replace(/:/g, '-');
+      const checkerSelect = document.getElementById('slotChecker_' + domKey);
       const checker = checkerSelect ? checkerSelect.value : (document.getElementById('operatorSelect')?.value || currentUser.name);
+      if (isHistoricalOrLocked() || pending.id == null) {
+        return submitShiftSlotCheckin(pending.time, false, `现场巡查未见异常，${tagText}`, checker);
+      }
       try {
         await apiRequest(`/patrol-slots/${pending.id}/checkin`, {
           method: 'POST',
           body: { checker_name: checker, result: `现场巡查未见异常，${tagText}` }
         });
-        await refreshAllData();
+        await reloadShiftView();
+        renderPatrolSlots();
         showToast(`已将标签快捷应用至【${pending.time} 巡查】(${checker})`);
       } catch (error) {
         showToast(`⚠️ ${error.message}`);
@@ -7586,8 +8388,17 @@
       try {
         await apiRequest(`/shifts/${currentShift.id}/handovers`, { method: 'POST', body: { next_leader_name: signer } });
         closeHandoverModal();
+        // 本班已封班归档：清掉显式选择与本地定位，直接进入后端新建的接班批次
+        explicitDutySelection = null;
+        viewingDate = '';
+        viewingShiftLabel = '';
+        isViewingToday = true;
+        currentShiftRecord = null;
         await refreshAllData();
-        showToast(`交接班归档完成！接班人 [${signer}] 已接管；未完成待办已标记跨班继承，近一周（7 天）备忘继续保留`);
+        const dutyDate = displayShiftDate();
+        const dutyLabel = viewingShiftLabel || (isDayShift ? '白班' : '夜班');
+        await loadShiftSnapshot(dutyDate, dutyLabel);
+        showToast(`交接班归档完成！接班人 [${signer}] 已接管 ${formatShiftDate(dutyDate)} ${dutyLabel}；未完成待办已标记跨班继承，近一周（7 天）备忘继续保留`);
       } catch (error) {
         showToast(`⚠️ ${error.message}`);
       }
@@ -7627,12 +8438,13 @@
     };
 
     switchRole = function (role) {
-      const selector = document.getElementById('roleSwitcherSelect');
-      if (selector) selector.value = currentUser.role;
-      showToast(role && role !== currentUser.role
-        ? '⚠️ 角色由服务端账号决定，请退出后使用对应账号登录'
-        : '当前角色已生效');
-      applyRolePermissions(currentUser.role);
+      if (!role || !['admin', 'operator', 'viewer'].includes(role)) return;
+      applyRolePermissions(role);
+      const roleNameMap = { admin: '系统管理员', operator: '在岗值班员', viewer: '只读观察员' };
+      showToast(`身份已切换为【${roleNameMap[role]}】· 界面权限已生效`);
+      // 普通角色不得停留在历史页面：切角色后立即复位到今日当班并锁死回溯入口
+      if (enforceShiftHistoryAccess()) return;
+      updateShiftHistoryPermissionUI();
     };
 
     handleRegisterUser = async function (event) {
@@ -7820,7 +8632,7 @@
         const shift = preview.shift;
         const now = new Date();
         const nextShiftName = shift.shift_type === 'day' ? '夜班 (17:30-次日08:00)' : '白班 (08:00-17:30)';
-        document.getElementById('handoverTime').innerText = now.toLocaleString();
+        document.getElementById('handoverTime').innerText = getLocalBeijingDateTimeStr(now);
         document.getElementById('modalShiftTypeDesc').innerText = `${shift.shift_date} ${shift.shift_type === 'day' ? '白班 (08:00-17:30)' : '夜班 (17:30-次日08:00)'} → ${nextShiftName}`;
         document.getElementById('handoverLeaderText').innerText = shift.leader_name;
         document.getElementById('handoverOpText').innerText = `${shift.operator_name} (坐班: ${shift.student_name || '-'})`;
@@ -7995,7 +8807,7 @@
       if (currentUser.role === 'viewer') return showToast('⚠️ 权限拦截：只读观察员不可导出闭环单据');
       try {
         const event = await ensureClosedEvent(eventNo);
-        const exportedAt = new Date().toISOString().replace('T', ' ').substring(0, 19);
+        const exportedAt = getLocalBeijingDateTimeStr();
         const auditText = `${event.id}|${event.created_at}|${event.closed_at}|${(event.history || []).map(item => `${item.stage_key}:${item.acted_at}:${item.note}`).join('|')}|${exportedAt}`;
         const auditHash = await sha256Hex(auditText);
         const element = document.getElementById('printableEventArchive');
@@ -8041,20 +8853,21 @@
     }
 
     function localDateTimeValue(date) {
-      const pad = value => String(value).padStart(2, '0');
-      return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+      const p = toBeijingParts(date);
+      return `${p.Y}-${p.M}-${p.D}T${p.hh}:${p.mm}`;
     }
 
     function setBatchRange(range) {
       const now = new Date();
       let start;
       if (range === 'week') {
-        const day = (now.getDay() + 6) % 7;
-        start = new Date(now);
-        start.setDate(now.getDate() - day);
-        start.setHours(0, 0, 0, 0);
+        const nowP = toBeijingParts(now);
+        const nowUtcInBeijing = new Date(Date.UTC(+nowP.Y, +nowP.M - 1, +nowP.D));
+        const day = (nowUtcInBeijing.getUTCDay() + 6) % 7;
+        start = new Date(Date.UTC(+nowP.Y, +nowP.M - 1, +nowP.D) - day * 86400000 - CN_OFFSET_MS);
       } else if (range === 'month') {
-        start = new Date(now.getFullYear(), now.getMonth(), 1);
+        const nowP = toBeijingParts(now);
+        start = new Date(Date.UTC(+nowP.Y, +nowP.M - 1, 1) - CN_OFFSET_MS);
       } else {
         start = new Date(now.getTime() - 30 * 86400000);
       }
@@ -8105,11 +8918,11 @@
       try {
         const query = new URLSearchParams({
           stage: 'closed',
-          start_at: new Date(startValue).toISOString(),
-          end_at: new Date(endValue).toISOString()
+          start_at: formatLogDateTime(startValue),
+          end_at: formatLogDateTime(endValue)
         });
         const events = await apiRequest(`/events?${query.toString()}`);
-        const exportedAt = new Date().toISOString().replace('T', ' ').substring(0, 19);
+        const exportedAt = getLocalBeijingDateTimeStr();
         const auditText = `${startValue}|${endValue}|${events.map(item => `${item.id}:${item.closed_at}`).join('|')}|${exportedAt}`;
         const auditHash = await sha256Hex(auditText);
         document.getElementById('printableEventArchive').innerHTML = buildBatchArchiveHtml(events, startValue.replace('T', ' '), endValue.replace('T', ' '), auditHash, exportedAt);

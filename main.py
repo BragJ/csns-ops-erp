@@ -23,6 +23,7 @@ from auth import (
 )
 from database import Base, SessionLocal, engine, get_db
 from models import (
+    CN_TZ,
     BeamForecast,
     DutyShift,
     Event,
@@ -39,7 +40,7 @@ from models import (
     ShiftTodo,
     SopExecution,
     User,
-    utcnow,
+    get_beijing_now,
 )
 
 
@@ -91,10 +92,19 @@ ASSIST_SEEDS = [
 ]
 
 
-def as_naive_utc(value: datetime) -> datetime:
+def as_naive_cn(value: datetime) -> datetime:
+    """把可能带时区的入参统一归一到北京时间的 naive datetime。
+
+    带 Z/偏移量的 ISO 串按绝对时刻换算到 UTC+8；不带时区的值视为已经是
+    北京时间，原样返回。入库前统一走这里，杜绝 UTC 与本地时间混存。
+    """
     if value.tzinfo is not None:
-        return value.astimezone(timezone.utc).replace(tzinfo=None)
+        return value.astimezone(CN_TZ).replace(tzinfo=None)
     return value
+
+
+# 历史别名：既有调用点语义等价，统一保留一个入口避免遗漏
+as_naive_utc = as_naive_cn
 
 
 ASSIST_PARAM_BACKFILL = (
@@ -172,6 +182,11 @@ def ensure_shift_todo_columns(db: Session) -> None:
     recalibrate_todo_timestamps(db)
 
 
+def standard_slot_times(label: str) -> list[str]:
+    """返回班次对应的标准巡查卡槽时间序列（白班 3 次 / 夜班 5 次）。"""
+    return DAY_SLOT_TIMES if shift_type_key(label) == "day" else NIGHT_SLOT_TIMES
+
+
 def ensure_shift_history_schema(db: Session) -> None:
     """为既有库补齐班次历史台账字段，并把历史班次回填进 shift_records。"""
     log_columns = {column["name"] for column in inspect(engine).get_columns("shift_logs")}
@@ -195,7 +210,50 @@ def ensure_shift_history_schema(db: Session) -> None:
     db.execute(
         text(
             "UPDATE shift_logs SET shift_type = COALESCE("
-            "(SELECT CASE d.shift_type WHEN 'night' THEN '夜班' ELSE '白班' END FROM duty_shifts d WHERE d.id = shift_logs.shift_id), '白班')"
+            "(SELECT CASE d.shift_type WHEN 'night' THEN '夜班' ELSE '白班' END FROM duty_shifts d WHERE d.id = shift_logs.shift_id), "
+            "CASE WHEN CAST(substr(occurred_at, 12, 2) AS INTEGER) >= 8 "
+            "AND (CAST(substr(occurred_at, 12, 2) AS INTEGER) < 17 "
+            "OR (substr(occurred_at, 12, 2) = '17' AND CAST(substr(occurred_at, 15, 2) AS INTEGER) < 30)) "
+            "THEN '白班' ELSE '夜班' END)"
+            " WHERE shift_type IS NULL OR shift_type = ''"
+        )
+    )
+    db.commit()
+
+    # 日期字段统一成 YYYY-MM-DD（兼容历史脏数据里的 / 分隔）
+    db.execute(
+        text("UPDATE shift_logs SET shift_date = replace(substr(shift_date, 1, 10), '/', '-') "
+             "WHERE shift_date IS NOT NULL AND shift_date != ''")
+    )
+    db.commit()
+
+    # 巡查卡槽补齐业务日期与班次归属，杜绝按历史日期查询时命中空数组
+    slot_columns = {column["name"] for column in inspect(engine).get_columns("patrol_slots")}
+    if "shift_date" not in slot_columns:
+        db.execute(text("ALTER TABLE patrol_slots ADD COLUMN shift_date VARCHAR(20)"))
+        db.execute(text("CREATE INDEX IF NOT EXISTS ix_patrol_slots_shift_date ON patrol_slots (shift_date)"))
+        db.commit()
+    if "shift_type" not in slot_columns:
+        db.execute(text("ALTER TABLE patrol_slots ADD COLUMN shift_type VARCHAR(10)"))
+        db.execute(text("CREATE INDEX IF NOT EXISTS ix_patrol_slots_shift_type ON patrol_slots (shift_type)"))
+        db.commit()
+
+    db.execute(
+        text(
+            "UPDATE patrol_slots SET shift_date = COALESCE("
+            "(SELECT d.shift_date FROM duty_shifts d WHERE d.id = patrol_slots.shift_id), "
+            "substr(COALESCE(checked_at, planned_at), 1, 10))"
+            " WHERE shift_date IS NULL OR shift_date = ''"
+        )
+    )
+    db.execute(text("UPDATE patrol_slots SET shift_date = replace(substr(shift_date, 1, 10), '/', '-') "
+                    "WHERE shift_date IS NOT NULL AND shift_date != ''"))
+    db.execute(
+        text(
+            "UPDATE patrol_slots SET shift_type = COALESCE("
+            "(SELECT CASE d.shift_type WHEN 'night' THEN '夜班' ELSE '白班' END FROM duty_shifts d "
+            "WHERE d.id = patrol_slots.shift_id), "
+            "CASE WHEN patrol_slots.slot_key IN ('09:00', '12:00', '15:00') THEN '白班' ELSE '夜班' END)"
             " WHERE shift_type IS NULL OR shift_type = ''"
         )
     )
@@ -211,6 +269,41 @@ def ensure_shift_history_schema(db: Session) -> None:
             record.shift_operator = shift.operator_name or record.shift_operator
             record.shift_student = shift.student_name or record.shift_student
             record.beam_mode = shift.beam_mode or record.beam_mode
+    db.commit()
+
+    # 凡有历史流水或历史巡查的 (日期, 班次)，即便缺班次档案也要补建主档，避免误报“暂无台账”
+    today = get_beijing_now().date().isoformat()
+    pairs = set()
+    for date_value, type_value in db.execute(
+        text("SELECT DISTINCT shift_date, shift_type FROM shift_logs "
+             "WHERE shift_date IS NOT NULL AND shift_date != ''")
+    ).all():
+        pairs.add((date_value, type_value))
+    for date_value, type_value in db.execute(
+        text("SELECT DISTINCT shift_date, shift_type FROM patrol_slots "
+             "WHERE shift_date IS NOT NULL AND shift_date != ''")
+    ).all():
+        pairs.add((date_value, type_value))
+
+    for date_value, type_value in sorted(pairs):
+        if not date_value or not type_value:
+            continue
+        label = type_value if type_value in ("白班", "夜班") else shift_type_label(shift_type_key(type_value))
+        record = get_shift_record(db, date_value, label)
+        if record is not None:
+            continue
+        duty = find_duty_shift(db, date_value, label)
+        record = ShiftRecord(
+            shift_date=date_value,
+            shift_type=label,
+            shift_leader=(duty.leader_name if duty else "周科") or "周科",
+            shift_operator=(duty.operator_name if duty else "王健威") or "王健威",
+            shift_student=(duty.student_name if duty else "") or "",
+            beam_mode=(duty.beam_mode if duty else "供束打靶") or "供束打靶",
+            is_handed_over=(date_value != today),
+            revision_version=1,
+        )
+        db.add(record)
     db.commit()
 
 
@@ -251,6 +344,115 @@ def iso(value: Optional[datetime]) -> Optional[str]:
     return value.isoformat(timespec="seconds") if value else None
 
 
+# ==========================================================
+# 一次性数据校准：修复历史上按 UTC 入库、比北京时间晚 8 小时错位的时间戳
+# ==========================================================
+# 判定窗口：入库小时落在 00:00~05:59 的机器写入记录，必然是 UTC 口径
+# （北京时间 08:00~13:59 的对应区间），加回 8 小时即为真实北京时间。
+CN_DRIFT_HOUR_WINDOW = (0, 6)
+# 校准标记表：同一目标只执行一次，避免重启服务反复叠加 8 小时
+TIME_RECALIBRATION_TABLE = "time_recalibrations"
+
+
+def _ensure_recalibration_log(db: Session) -> None:
+    db.execute(
+        text(
+            f"CREATE TABLE IF NOT EXISTS {TIME_RECALIBRATION_TABLE} ("
+            "target VARCHAR(80) PRIMARY KEY, "
+            "applied_at DATETIME NOT NULL, "
+            "affected_rows INTEGER NOT NULL DEFAULT 0)"
+        )
+    )
+    db.commit()
+
+
+def _recalibration_done(db: Session, target: str) -> bool:
+    found = db.scalar(
+        text(f"SELECT target FROM {TIME_RECALIBRATION_TABLE} WHERE target = :target"),
+        {"target": target},
+    )
+    return found is not None
+
+
+def _mark_recalibration(db: Session, target: str, affected: int) -> None:
+    db.execute(
+        text(
+            f"INSERT OR REPLACE INTO {TIME_RECALIBRATION_TABLE} "
+            "(target, applied_at, affected_rows) VALUES (:target, :applied_at, :affected)"
+        ),
+        {"target": target, "applied_at": get_beijing_now().isoformat(sep=" ", timespec="seconds"),
+         "affected": affected},
+    )
+    db.commit()
+
+
+# 明确列出受 UTC 错位影响的业务日期；绝不能用“服务器今天”动态推算，
+# 否则将来某天夜班 00:00~05:59 的真实北京时间打卡会被误加 8 小时。
+LEGACY_UTC_DRIFT_DATES = ("2026-11-19",)
+
+
+def recalibrate_utc_drifted_timestamps(db: Session, target_dates: tuple[str, ...] = LEGACY_UTC_DRIFT_DATES) -> int:
+    """把按时区错位（UTC 口径）写入的时间戳整体加回 8 小时。
+
+    只处理白名单日期中「小时数落在 00:00~05:59」的机器写入记录，
+    人工补录/种子数据的整点时间不受影响；每个目标日期只执行一次，
+    由 time_recalibrations 幂等表兜底，重启不会重复叠加。
+    """
+    _ensure_recalibration_log(db)
+    total = 0
+    for day in target_dates:
+        total += _recalibrate_one_day(db, day)
+    return total
+
+
+def _recalibrate_one_day(db: Session, day: str) -> int:
+    target_key = f"utc_drift:{day}"
+    if _recalibration_done(db, target_key):
+        return 0
+
+    low, high = CN_DRIFT_HOUR_WINDOW
+    # 按时间戳自身的日历日判定（shift_date 存在历史陈旧值，不能作为锚点）
+    window = (
+        f"DATE({{col}}) = :day AND SUBSTR({{col}}, 12, 2) >= '{low:02d}' "
+        f"AND SUBSTR({{col}}, 12, 2) < '{high:02d}'"
+    )
+    # 巡检打卡：只修精确到微秒的机器写入记录（人工补录与种子数据均为整分整秒）
+    patrol_sql = (
+        "UPDATE patrol_slots SET checked_at = datetime(checked_at, '+8 hours') "
+        f"WHERE checked_at IS NOT NULL AND {window.format(col='checked_at')} "
+        "AND CAST(SUBSTR(checked_at, 21, 6) AS INTEGER) > 0"
+    )
+    log_sql = (
+        "UPDATE shift_logs SET occurred_at = datetime(occurred_at, '+8 hours') "
+        f"WHERE occurred_at IS NOT NULL AND {window.format(col='occurred_at')} "
+        "AND (source_type = 'patrol_slot' OR CAST(SUBSTR(occurred_at, 21, 6) AS INTEGER) > 0)"
+    )
+    todo_sql = (
+        "UPDATE shift_todos SET done_at = datetime(done_at, '+8 hours') "
+        f"WHERE done_at IS NOT NULL AND {window.format(col='done_at')} "
+        "AND CAST(SUBSTR(done_at, 21, 6) AS INTEGER) > 0"
+    )
+    todo_created_sql = (
+        "UPDATE shift_todos SET created_at = datetime(created_at, '+8 hours') "
+        f"WHERE created_at IS NOT NULL AND {window.format(col='created_at')} "
+        "AND CAST(SUBSTR(created_at, 21, 6) AS INTEGER) > 0"
+    )
+    login_sql = (
+        "UPDATE users SET last_login_at = datetime(last_login_at, '+8 hours') "
+        f"WHERE last_login_at IS NOT NULL AND {window.format(col='last_login_at')} "
+        "AND CAST(SUBSTR(last_login_at, 21, 6) AS INTEGER) > 0"
+    )
+
+    affected = 0
+    for statement in (patrol_sql, log_sql, todo_sql, todo_created_sql, login_sql):
+        affected += db.execute(text(statement), {"day": day}).rowcount or 0
+    db.commit()
+    _mark_recalibration(db, target_key, affected)
+    if affected:
+        print(f"[time-fix] {day} 已校准 {affected} 条 UTC 错位时间戳（+8 小时 → 北京时间）")
+    return affected
+
+
 TODO_RETENTION_DAYS = 7
 
 
@@ -274,13 +476,13 @@ def todo_is_visible(todo: ShiftTodo, now: Optional[datetime] = None) -> bool:
     anchor = todo_retention_anchor(todo)
     if anchor is None:
         return False
-    cutoff = (now or utcnow()) - timedelta(days=TODO_RETENTION_DAYS)
+    cutoff = (now or get_beijing_now()) - timedelta(days=TODO_RETENTION_DAYS)
     return anchor >= cutoff
 
 
 def list_visible_todos(db: Session, shift_id: Optional[int] = None) -> list[ShiftTodo]:
     """跨班拉取待办清单：待执行在前（按约定时间升序），已完成在后（按完成时间倒序）。"""
-    now = utcnow()
+    now = get_beijing_now()
     items = [item for item in db.scalars(select(ShiftTodo)).all() if todo_is_visible(item, now)]
     pending = sorted((item for item in items if not item.is_done), key=lambda item: item.due_at)
     done = sorted(
@@ -340,8 +542,15 @@ def create_following_shift(db: Session, previous: DutyShift, leader_name: str) -
         next_date = previous.shift_date
         next_type = "night"
     else:
+        # 夜班归属其开始当天，次日早间交接后接班的是“次日的白班”
         next_date = previous.shift_date + timedelta(days=1)
         next_type = "day"
+    # 幂等：同一 (业务日, 班次) 已有批次时直接复用并置为在岗，避免重复建档
+    existing = find_duty_shift(db, next_date.isoformat(), shift_type_label(next_type))
+    if existing is not None:
+        existing.status = "active"
+        existing.leader_name = leader_name or existing.leader_name
+        return existing
     start, end = shift_window(next_date, next_type)
     following = DutyShift(
         shift_date=next_date,
@@ -376,11 +585,14 @@ def seed_database(db: Session) -> DutyShift:
         db.flush()
 
     if db.scalar(select(DutyShift).where(DutyShift.status == "active")) is None:
-        today = utcnow().date()
-        start, end = shift_window(today, "day")
+        # 首启种子按业务日建档：早上 08:05 冷启动时归属前一晚夜班，而非当天白班
+        ctx_date, ctx_label = active_operational_context()
+        today = date.fromisoformat(ctx_date)
+        shift_key = shift_type_key(ctx_label)
+        start, end = shift_window(today, shift_key)
         shift = DutyShift(
             shift_date=today,
-            shift_type="day",
+            shift_type=shift_key,
             planned_start=start,
             planned_end=end,
             leader_name="王征",
@@ -415,8 +627,8 @@ def seed_database(db: Session) -> DutyShift:
             Event(event_no="EV-2026-001", title="CCR-05 换样抽速慢于规程 (>50Pa 门槛阻断)", device="低温CCR-05 / SANS", priority="紧急", reporter_name="王健威", stage="pending", notes="抽气20分钟仍处72 Pa，触发Stop-Work安全红线，未强启分子泵。现场检查密封法兰螺栓。", created_shift_id=shift.id if shift else None),
             Event(event_no="EV-2026-002", title="多物理谱仪重水保护气缓冲罐微幅渗漏", device="MPI重水系统", priority="重要", reporter_name="王征", stage="progress", notes="压力达到0.12 MPa高限，已调整一次背压阀，正在排查减压阀后管道接头。", created_shift_id=shift.id if shift else None),
             Event(event_no="EV-2026-003", title="大气中子谱仪屏蔽门行程限位跳变偶发误报", device="Atmospheric屏蔽门", priority="一般", reporter_name="王健威", stage="escalated", notes="已交由设备机械与联锁专业组处理，专业组将于明日清晨排班检修微动开关。", created_shift_id=shift.id if shift else None),
-            Event(event_no="EV-2026-004", title="SANS 样品室 LakeShore 336 测温传感器通道偶发断线", device="LakeShore-336", priority="重要", reporter_name="王健威", stage="closed", notes="已重新压接航空插头引脚，经过 12 小时连续测温未再出现跳变，已闭环归档。", created_shift_id=shift.id if shift else None, closed_at=utcnow()),
-            Event(event_no="EV-2026-005", title="靶站 2 号主循环冷水泵轴承振动偏高预警", device="靶站一次循环泵", priority="一般", reporter_name="王征", stage="closed", notes="专业水冷组到场加注润滑脂后振动幅值回落至合格区间，闭环。", created_shift_id=shift.id if shift else None, closed_at=utcnow()),
+            Event(event_no="EV-2026-004", title="SANS 样品室 LakeShore 336 测温传感器通道偶发断线", device="LakeShore-336", priority="重要", reporter_name="王健威", stage="closed", notes="已重新压接航空插头引脚，经过 12 小时连续测温未再出现跳变，已闭环归档。", created_shift_id=shift.id if shift else None, closed_at=get_beijing_now()),
+            Event(event_no="EV-2026-005", title="靶站 2 号主循环冷水泵轴承振动偏高预警", device="靶站一次循环泵", priority="一般", reporter_name="王征", stage="closed", notes="专业水冷组到场加注润滑脂后振动幅值回落至合格区间，闭环。", created_shift_id=shift.id if shift else None, closed_at=get_beijing_now()),
         ]
         db.add_all(events)
         db.flush()
@@ -540,6 +752,8 @@ async def lifespan(_app: FastAPI):
         seed_database(db)
         # 种子数据落库后再回填班次主档案，确保首启时历史班次同样具备 shift_records 元数据
         ensure_shift_history_schema(db)
+        # 校准历史上按 UTC 入库的错位时间戳（幂等，按目标日期只执行一次）
+        recalibrate_utc_drifted_timestamps(db)
         if db.scalar(select(EpicsAlarmPV).limit(1)) is None:
             try:
                 from scripts.import_pv_alarms import import_pv_alarms
@@ -760,17 +974,97 @@ def shift_dict(shift: DutyShift) -> dict:
 
 
 def slot_dict(slot: PatrolSlot) -> dict:
+    status = slot.status or "pending"
     return {
         "id": slot.id,
         "slot_key": slot.slot_key,
+        "slot_time": slot.slot_key,
         "time": slot.slot_key,
+        "shift_date": slot.shift_date or (slot.shift.shift_date.isoformat() if slot.shift else None),
+        "shift_type": slot.shift_type or (shift_type_label(slot.shift.shift_type) if slot.shift else None),
         "planned_at": iso(slot.planned_at),
-        "status": slot.status,
+        "status": status,
+        "status_label": {"checked": "normal", "anomaly": "abnormal"}.get(status, "pending"),
         "result": slot.result,
+        "remark": slot.result,
         "anomaly_detail": slot.anomaly_detail,
+        "tags": [slot.anomaly_detail] if slot.anomaly_detail else [],
         "checker": slot.checker_name or "--",
+        "inspector": slot.checker_name or "",
         "checked_at": display_minute(slot.checked_at) if slot.checked_at else "--",
+        "checked_at_full": display_time(slot.checked_at) if slot.checked_at else "--",
     }
+
+
+def placeholder_slot_dict(shift_date: str, label: str, slot_time: str) -> dict:
+    """数据库中尚无该时间槽记录时，构造默认未打卡占位对象。"""
+    return {
+        "id": None,
+        "slot_key": slot_time,
+        "slot_time": slot_time,
+        "time": slot_time,
+        "shift_date": shift_date,
+        "shift_type": label,
+        "planned_at": None,
+        "status": "pending",
+        "status_label": "pending",
+        "result": "待到点巡查",
+        "remark": "",
+        "anomaly_detail": None,
+        "tags": [],
+        "checker": "--",
+        "inspector": "",
+        "checked_at": "--",
+        "checked_at_full": "--",
+    }
+
+
+def ensure_shift_slots(db: Session, shift_date: str, label: str) -> Optional[DutyShift]:
+    """确保目标日期与班次存在班次档案与全部标准巡查卡槽。
+
+    历史或今日日期缺档时按已封班口径补建；未来日期不做落库，交由调用方构造占位。
+    """
+    try:
+        parsed = date.fromisoformat(shift_date)
+    except ValueError:
+        return None
+    if parsed > get_beijing_now().date():
+        return None
+
+    duty = find_duty_shift(db, shift_date, label)
+    if duty is None:
+        duty = ensure_historical_shift(db, shift_date, label)
+    db.flush()
+
+    existing = {}
+    for slot in db.scalars(select(PatrolSlot).where(PatrolSlot.shift_id == duty.id)).all():
+        existing[slot.slot_key] = slot
+
+    changed = False
+    for slot_time in standard_slot_times(label):
+        slot = existing.get(slot_time)
+        if slot is None:
+            slot = PatrolSlot(
+                shift_id=duty.id,
+                shift_date=shift_date,
+                shift_type=label,
+                slot_key=slot_time,
+                planned_at=slot_datetime(duty, slot_time),
+                status="pending",
+                result="待到点巡查",
+            )
+            db.add(slot)
+            changed = True
+        else:
+            if slot.shift_date != shift_date:
+                slot.shift_date = shift_date
+                changed = True
+            if slot.shift_type != label:
+                slot.shift_type = label
+                changed = True
+    if changed:
+        db.flush()
+    return duty
 
 
 def todo_dict(todo: ShiftTodo) -> dict:
@@ -908,6 +1202,136 @@ def get_active_shift(db: Session, lock: bool = False) -> DutyShift:
     return shift
 
 
+# ==========================================================
+# 运行值班业务日（CSNS 两班制）
+#   白班 08:00~17:30       -> 业务日 = 当日
+#   夜班 17:30~次日 08:00   -> 业务日 = 夜班开始当天
+# 次日 00:00~09:30 仍属“前一天开始的夜班”，
+# 值班台账、PDF 导出与交接班都必须沿用这层业务日口径。
+# ==========================================================
+DAY_SHIFT_START_DECIMAL = 8.5     # 08:30 起算白班（含早间交接宽限）
+NIGHT_SHIFT_START_DECIMAL = 17.5  # 17:30 起算夜班
+MORNING_HANDOVER_WINDOW_HOUR = 9.5  # 00:00~09:30 夜班早间交接宽限期
+
+
+def active_operational_context(now: Optional[datetime] = None) -> tuple[str, str]:
+    """返回当前时刻物理上对应的（当班业务日期, 班次中文标签）。"""
+    moment = now or get_beijing_now()
+    decimal = moment.hour + moment.minute / 60
+    today = moment.date()
+    if decimal >= NIGHT_SHIFT_START_DECIMAL:
+        return today.isoformat(), "夜班"
+    if decimal < DAY_SHIFT_START_DECIMAL:
+        return (today - timedelta(days=1)).isoformat(), "夜班"
+    return today.isoformat(), "白班"
+
+
+def in_morning_handover_window(now: Optional[datetime] = None) -> bool:
+    """00:00~09:30 夜班早间交接宽限期：允许值班员操作昨晚开始的夜班台账。"""
+    moment = now or get_beijing_now()
+    return (moment.hour + moment.minute / 60) < MORNING_HANDOVER_WINDOW_HOUR
+
+
+def operational_duty_targets(now: Optional[datetime] = None) -> set:
+    """当前允许值班员操作的（业务日期, 班次）集合。
+
+    正常当班 = 业务日推算结果；00:00~09:30 早间交接宽限期额外放行
+    “昨晚开始的夜班”，避免次日早上交班时被误判为历史归档。
+    """
+    moment = now or get_beijing_now()
+    ctx_date, ctx_label = active_operational_context(moment)
+    targets = {(ctx_date, ctx_label)}
+    if in_morning_handover_window(moment):
+        targets.add(((moment.date() - timedelta(days=1)).isoformat(), "夜班"))
+    return targets
+
+
+def is_active_duty_shift(shift_date: Optional[str], label: Optional[str],
+                         now: Optional[datetime] = None) -> bool:
+    """判断“日期 + 班次”是否为当前正在执行的当班业务批次。"""
+    if not shift_date:
+        return False
+    target_label = shift_type_label(shift_type_key(label)) if label else active_operational_context(now)[1]
+    return (shift_date, target_label) in operational_duty_targets(now)
+
+
+def is_permitted_shift_access(user: User, shift_date: str, label: Optional[str],
+                              now: Optional[datetime] = None) -> bool:
+    """值班台账读取权限：管理员不受限，值班员仅可看今日与当班业务批次。"""
+    if user is not None and user.role == "admin":
+        return True
+    moment = now or get_beijing_now()
+    if shift_date == moment.date().isoformat():
+        return True
+    return is_active_duty_shift(shift_date=shift_date, label=label, now=moment)
+
+
+def operational_current_shift(db: Session) -> DutyShift:
+    """取当前业务日对应的值班批次（缺档时按业务日补建）。
+
+    跨零点夜班在次日 00:00~08:30 仍匹配“前一天 + 夜班”，
+    因此不会因为自然日翻篇而把交接班/导出指向新一天的空白台账。
+    """
+    ctx_date, ctx_label = active_operational_context()
+    now = get_beijing_now()
+
+    def _is_usable(candidate: Optional[DutyShift], allow_past: bool = False) -> bool:
+        """在岗批次可信度校验：未归档，且计划窗口覆盖当前时刻（或本身就是业务日批次）。"""
+        if candidate is None:
+            return False
+        if db.scalar(select(ShiftHandover).where(ShiftHandover.shift_id == candidate.id,
+                                                 ShiftHandover.status == "archived")):
+            return False
+        if candidate.shift_date.isoformat() == ctx_date \
+                and shift_type_label(candidate.shift_type) == ctx_label:
+            return True
+        if allow_past:
+            return True
+        # 计划窗口覆盖“现在”才算在岗，避免沿用早已过期的遗留 active 批次
+        start = candidate.planned_start.replace(second=0, microsecond=0)
+        end = candidate.planned_end.replace(second=0, microsecond=0)
+        return start <= now <= end
+
+    # 优先采用真正的在岗批次：夜班完成交接归档后，接班的次日白班才是当前台账
+    active = db.scalar(select(DutyShift).where(DutyShift.status == "active").order_by(DutyShift.id.desc()))
+    if _is_usable(active):
+        return active
+
+    duty = find_duty_shift(db, ctx_date, ctx_label)
+    if _is_usable(duty, allow_past=True):
+        return duty
+
+    # 业务日批次尚未建档：沿用现有班组信息补建当班批次，并归档其他日期的陈旧活动批次
+    source = active
+    if source is None:
+        source = db.scalar(select(DutyShift).order_by(DutyShift.id.desc()))
+    target_date = date.fromisoformat(ctx_date)
+    today = get_beijing_now().date()
+    if target_date > today:
+        target_date = today
+    start, end = shift_window(target_date, shift_type_key(ctx_label))
+    created = DutyShift(
+        shift_date=target_date,
+        shift_type=shift_type_key(ctx_label),
+        planned_start=start,
+        planned_end=end,
+        leader_name=(source.leader_name if source else "周科") or "周科",
+        operator_name=(source.operator_name if source else "王健威") or "王健威",
+        student_name=(source.student_name if source else "") or "",
+        beam_mode=(source.beam_mode if source else "供束打靶") or "供束打靶",
+        status="active",
+    )
+    db.add(created)
+    db.flush()
+    generate_slots(db, created)
+    for other in db.scalars(select(DutyShift).where(DutyShift.status == "active", DutyShift.id != created.id)).all():
+        other.status = "closed"
+        other.ended_at = other.ended_at or get_beijing_now()
+    sync_shift_record(db, created)
+    db.commit()
+    return created
+
+
 SHIFT_TYPE_LABELS = {"day": "白班", "night": "夜班"}
 SHIFT_TYPE_KEYS = {"白班": "day", "夜班": "night", "day": "day", "night": "night"}
 HISTORICAL_WRITE_DENIED = "权限不足：历史班次及已交接归档记录仅允许系统管理员修改"
@@ -1016,12 +1440,15 @@ def shift_is_locked(db: Session, shift: Optional[DutyShift] = None, shift_date: 
         duty = find_duty_shift(db, shift_date, label)
     if duty is not None and duty.status == "active":
         return False
+    # 当前业务批次（含 00:00~09:30 早间交接窗口内的昨晚夜班）不算历史归档
+    if is_active_duty_shift(shift_date, label):
+        return False
     try:
         target = date.fromisoformat(shift_date)
     except ValueError:
         return False
     # 未来日期不属于有效值班台账，同样视为只允许管理员（补录建档）写入
-    return target != utcnow().date()
+    return target != get_beijing_now().date()
 
 
 def assert_shift_writable(db: Session, user: User, shift: Optional[DutyShift] = None,
@@ -1039,6 +1466,16 @@ def assert_shift_writable(db: Session, user: User, shift: Optional[DutyShift] = 
     if user.role != "admin":
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=HISTORICAL_WRITE_DENIED)
     return True
+
+
+def assert_shift_readable(user: User, shift: DutyShift) -> None:
+    """历史班次的明细读取仅对系统管理员开放，防止绕过前端按 shift_id 直查。"""
+    if user.role == "admin" or shift.status == "active":
+        return
+    if is_active_duty_shift(shift.shift_date.isoformat(), shift_type_label(shift.shift_type)):
+        return
+    raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,
+                        detail="权限不足：仅系统管理员可查询历史白/夜班值班记录")
 
 
 def ensure_shift_record(db: Session, shift_date: str, label: str,
@@ -1072,7 +1509,7 @@ def bump_shift_revision(db: Session, shift_date: str, label: str, user: User,
     record = ensure_shift_record(db, shift_date, label, duty)
     record.revision_version = int(record.revision_version or 1) + 1
     record.last_revised_by = user.real_name
-    record.last_revised_at = utcnow().strftime("%Y-%m-%d %H:%M")
+    record.last_revised_at = get_beijing_now().strftime("%Y-%m-%d %H:%M")
     return record
 
 
@@ -1117,6 +1554,7 @@ def ensure_historical_shift(db: Session, shift_date: str, label: str) -> DutyShi
     db.add(shift)
     db.flush()
     sync_shift_record(db, shift, handover=True)
+    generate_slots(db, shift)
     return shift
 
 
@@ -1141,7 +1579,7 @@ def resolve_shift_for_log(db: Session, shift_date: Optional[str], label: Optiona
             if active is not None and active.shift_date == target_date and active.shift_type == key:
                 return active
             return ensure_historical_shift(db, shift_date, normalized)
-    return get_active_shift(db)
+    return operational_current_shift(db)
 
 
 def append_log(
@@ -1158,7 +1596,7 @@ def append_log(
     source_id: Optional[str] = None,
 ) -> ShiftLog:
     if shift is None:
-        shift = get_active_shift(db)
+        shift = operational_current_shift(db)
     log = ShiftLog(
         shift_id=shift.id,
         shift_date=shift.shift_date.isoformat(),
@@ -1191,7 +1629,7 @@ def next_event_no(db: Session, year: int) -> str:
 
 @app.get("/api/health")
 def health():
-    return {"status": "ok", "service": "ops-erp", "time": iso(utcnow())}
+    return {"status": "ok", "service": "ops-erp", "time": iso(get_beijing_now())}
 
 
 @app.post("/api/v1/auth/login")
@@ -1201,7 +1639,7 @@ def login(payload: LoginPayload, db: Session = Depends(get_db)):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="用户名或密码错误")
     if user.status != "active":
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="账号尚未通过管理员审核")
-    user.last_login_at = utcnow()
+    user.last_login_at = get_beijing_now()
     db.commit()
     return {"access_token": create_access_token(user), "token_type": "bearer", "user": user_dict(user), "expires_in": 28800}
 
@@ -1296,7 +1734,7 @@ def delete_user(user_id: int, admin: User = Depends(require_admin), db: Session 
 
 @app.get("/api/v1/shifts/current")
 def current_shift(_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    shift = get_active_shift(db)
+    shift = operational_current_shift(db)
     record = sync_shift_record(db, shift)
     db.commit()
     payload = shift_dict(shift)
@@ -1318,16 +1756,19 @@ def current_shift(_user: User = Depends(get_current_user), db: Session = Depends
 def shift_data(
     shift_date: str = Query(alias="date"),
     shift: str = Query(default="白班"),
-    _user: User = Depends(get_current_user),
+    user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """按日期 + 班次回溯历史台账：所有角色均可查看。"""
+    """按日期 + 班次回溯台账：历史日期仅系统管理员可查询。"""
     try:
         parsed = date.fromisoformat(shift_date)
     except ValueError:
         raise HTTPException(status_code=422, detail="date 必须为 YYYY-MM-DD 格式")
     label = shift if shift in ("白班", "夜班") else shift_type_label(shift_type_key(shift))
     key = shift_type_key(label)
+    if not is_permitted_shift_access(user, shift_date, label):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,
+                            detail="权限不足：仅系统管理员可查询历史白/夜班值班记录")
 
     record = get_shift_record(db, shift_date, label)
     duty = db.scalar(
@@ -1336,9 +1777,19 @@ def shift_data(
         .order_by(DutyShift.id.desc())
     )
 
-    slots = []
+    standard_times = standard_slot_times(label)
+    slot_map = {}
     if duty is not None:
-        slots = [slot_dict(item) for item in sorted(duty.patrol_slots, key=lambda value: value.planned_at)]
+        for slot in db.scalars(select(PatrolSlot).where(PatrolSlot.shift_id == duty.id)).all():
+            slot_map[slot.slot_key] = slot_dict(slot)
+    # 兼容同日期多批次（如同日既有已封班又有活动批次）时的补漏
+    for slot in db.scalars(
+        select(PatrolSlot).where(PatrolSlot.shift_date == shift_date, PatrolSlot.shift_type == label)
+    ).all():
+        slot_map.setdefault(slot.slot_key, slot_dict(slot))
+
+    slots = [slot_map.get(slot_time) or placeholder_slot_dict(shift_date, label, slot_time)
+             for slot_time in standard_times]
 
     logs = [
         log_dict(item)
@@ -1365,7 +1816,9 @@ def shift_data(
         "last_revised_at": None,
     }
     meta["is_locked"] = locked
-    meta["is_today"] = bool(duty is not None and duty.status == "active")
+    # “当班”按业务日判定：跨零点夜班在次日早间仍属当班，不能被判成历史归档
+    meta["is_today"] = bool(duty is not None and duty.status == "active") or is_active_duty_shift(shift_date, label)
+    meta["is_active_duty"] = is_active_duty_shift(shift_date, label)
     meta["is_empty"] = is_empty
 
     return {
@@ -1414,10 +1867,11 @@ def revise_shift_record(payload: ShiftRecordRevisePayload, user: User = Depends(
 
 
 @app.get("/api/v1/shifts/{shift_id}/patrol-slots")
-def list_patrol_slots(shift_id: int, _user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+def list_patrol_slots(shift_id: int, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     shift = db.get(DutyShift, shift_id)
     if shift is None:
         raise HTTPException(status_code=404, detail="班次不存在")
+    assert_shift_readable(user, shift)
     return [slot_dict(item) for item in sorted(shift.patrol_slots, key=lambda value: value.planned_at)]
 
 
@@ -1459,6 +1913,73 @@ def switch_shift_type(shift_id: int, payload: ShiftPayload, _user: User = Depend
     return update_shift(shift_id, payload, _user, db)
 
 
+class SwitchOperationalPayload(BaseModel):
+    shift_type: Literal["day", "night"]
+
+
+@app.post("/api/v1/shifts/switch-operational")
+def switch_operational_shift(payload: SwitchOperationalPayload,
+                             user: User = Depends(require_operator_or_admin),
+                             db: Session = Depends(get_db)):
+    """按业务日切换在岗班次（早间交接联动日期）。
+
+    白天同类切换沿用今天；夜班跨零点后切白班则推进到次日的白班台账，
+    早间从白班回看夜班则回退到昨晚的夜班台账。
+    """
+    now = get_beijing_now()
+    target_label = shift_type_label(payload.shift_type)
+    morning = now.hour < 12
+    today_str = now.date().isoformat()
+
+    current = operational_current_shift(db)
+    if payload.shift_type == "day" and morning and current is not None and current.shift_type == "night":
+        target_date = today_str
+    elif payload.shift_type == "night" and morning and current is not None and current.shift_type == "day":
+        target_date = (now.date() - timedelta(days=1)).isoformat()
+    else:
+        target_date = current.shift_date.isoformat() if current is not None else today_str
+
+    try:
+        target = find_duty_shift(db, target_date, target_label)
+        if target is None:
+            start, end = shift_window(date.fromisoformat(target_date), payload.shift_type)
+            source = current
+            target = DutyShift(
+                shift_date=date.fromisoformat(target_date),
+                shift_type=payload.shift_type,
+                planned_start=start,
+                planned_end=end,
+                leader_name=(source.leader_name if source else "周科") or "周科",
+                operator_name=(source.operator_name if source else "王健威") or "王健威",
+                student_name=(source.student_name if source else "") or "",
+                beam_mode=(source.beam_mode if source else "供束打靶") or "供束打靶",
+                status="active",
+            )
+            db.add(target)
+            db.flush()
+            generate_slots(db, target)
+        elif not db.scalar(select(ShiftHandover).where(ShiftHandover.shift_id == target.id)):
+            # 尚未归档交接的批次才允许直接置为在岗
+            target.status = "active"
+        for other in db.scalars(select(DutyShift).where(DutyShift.status == "active", DutyShift.id != target.id)).all():
+            other.status = "closed"
+            other.ended_at = other.ended_at or now
+        sync_shift_record(db, target)
+        db.commit()
+    except HTTPException:
+        db.rollback()
+        raise
+    except Exception:
+        db.rollback()
+        raise
+    return {
+        "id": target.id,
+        "shift_date": target.shift_date.isoformat(),
+        "shift_type": shift_type_label(target.shift_type),
+        "shift_type_key": target.shift_type,
+    }
+
+
 @app.get("/api/v1/shifts/{shift_id}/todos")
 def list_todos(shift_id: int, _user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     # 跨班滚动视图：不再按 shift_id 硬隔离，未闭环待办全量继承
@@ -1475,7 +1996,7 @@ def create_todo(shift_id: int, payload: TodoCreatePayload, user: User = Depends(
         content=payload.content.strip(),
         created_by=user.real_name,
         carried_over=False,
-        created_at=utcnow(),
+        created_at=get_beijing_now(),
     )
     db.add(todo)
     db.commit()
@@ -1489,7 +2010,7 @@ def update_todo(todo_id: int, payload: TodoUpdatePayload, user: User = Depends(r
         raise HTTPException(status_code=404, detail="待办不存在")
     todo.is_done = payload.is_done
     if payload.is_done:
-        todo.done_at = utcnow()
+        todo.done_at = get_beijing_now()
         todo.completed_by = user.real_name
     else:
         todo.done_at = None
@@ -1514,11 +2035,15 @@ def list_shift_logs(
     category: Optional[str] = Query(default=None),
     log_status: Optional[str] = Query(default=None, alias="status"),
     limit: int = Query(default=100, ge=1, le=500),
-    _user: User = Depends(get_current_user),
+    user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     if shift_id is None:
         shift_id = get_active_shift(db).id
+    shift = db.get(DutyShift, shift_id)
+    if shift is None:
+        raise HTTPException(status_code=404, detail="班次不存在")
+    assert_shift_readable(user, shift)
     statement = select(ShiftLog).where(ShiftLog.shift_id == shift_id)
     if category and category != "ALL":
         statement = statement.where(ShiftLog.category == category)
@@ -1629,9 +2154,9 @@ def checkin_patrol_slot(slot_id: int, payload: CheckinPayload, user: User = Depe
         if slot is None:
             raise HTTPException(status_code=404, detail="巡查槽不存在")
         revision = assert_shift_writable(db, user, shift=slot.shift)
-        if slot.status == "checked":
+        if slot.status == "checked" and user.role != "admin":
             raise HTTPException(status_code=409, detail="该巡查槽已打卡")
-        now = utcnow()
+        now = get_beijing_now()
         slot.status = "checked"
         slot.result = payload.result.strip()
         slot.checker_name = payload.checker_name.strip()
@@ -1657,7 +2182,7 @@ def report_patrol_anomaly(slot_id: int, payload: AnomalyPayload, user: User = De
         if slot is None:
             raise HTTPException(status_code=404, detail="巡查槽不存在")
         revision = assert_shift_writable(db, user, shift=slot.shift)
-        now = utcnow()
+        now = get_beijing_now()
         description = payload.description.strip()
         slot.status = "anomaly"
         slot.result = f"【异常】{description}"
@@ -1713,6 +2238,86 @@ def reset_patrol_slot(slot_id: int, _user: User = Depends(require_operator_or_ad
     return slot_dict(slot)
 
 
+class ShiftSlotCheckinPayload(BaseModel):
+    """按业务日期 + 班次 + 时间槽补录 / 重核巡查记录。"""
+
+    shift_date: str = Field(min_length=8, max_length=20)
+    shift_type: str = Field(min_length=2, max_length=10)
+    slot_time: str = Field(min_length=4, max_length=10)
+    checker_name: str = Field(min_length=1, max_length=80)
+    result: str = Field(default="现场巡查完成，靶站大厅及各重点区域未见异常。", max_length=500)
+    anomaly: bool = False
+
+
+@app.post("/api/v1/shift-data/checkin")
+def checkin_shift_slot(payload: ShiftSlotCheckinPayload, user: User = Depends(require_operator_or_admin),
+                       db: Session = Depends(get_db)):
+    """按业务日期与时间槽补录巡查：未建档的槽位会自动补建，历史批次仅管理员可用。"""
+    label = payload.shift_type if payload.shift_type in ("白班", "夜班") else shift_type_label(
+        shift_type_key(payload.shift_type)
+    )
+    slot_time = payload.slot_time
+    if slot_time not in standard_slot_times(label):
+        raise HTTPException(status_code=422, detail="该时间槽不属于所选班次的标准巡查时点")
+    try:
+        assert_shift_writable(db, user, shift_date=payload.shift_date, label=label)
+        duty = ensure_shift_slots(db, payload.shift_date, label)
+        if duty is None:
+            raise HTTPException(status_code=422, detail="无法为未来日期补录巡查记录")
+        slot = db.scalar(
+            select(PatrolSlot).where(PatrolSlot.shift_id == duty.id, PatrolSlot.slot_key == slot_time)
+        )
+        if slot is None:
+            raise HTTPException(status_code=500, detail="标准巡查卡槽创建失败，请重试")
+        now = get_beijing_now()
+        detail = payload.result.strip()
+        if payload.anomaly:
+            slot.status = "anomaly"
+            slot.result = f"【异常】{detail}"
+            slot.anomaly_detail = detail
+        else:
+            slot.status = "checked"
+            slot.result = detail
+            slot.anomaly_detail = None
+        slot.checker_name = payload.checker_name.strip()
+        slot.checked_at = now
+        slot.shift_date = payload.shift_date
+        slot.shift_type = label
+        append_log(
+            db,
+            duty,
+            user,
+            "运行报警" if payload.anomaly else "现场巡查",
+            "靶站巡检发现" if payload.anomaly else "靶站综合大厅",
+            f"{'【巡检异常】' if payload.anomaly else ''}{slot_time} "
+            f"{'现场巡查发现异常：' if payload.anomaly else '现场巡查完成：'}{detail}",
+            "重要" if payload.anomaly else "一般",
+            "待处理" if payload.anomaly else "已闭环",
+            slot.checker_name,
+            "patrol_slot",
+            str(slot.id),
+        )
+        # 仅当批次处于历史/已交接状态时才升版留痕，当班补录不改版本号
+        locked = shift_is_locked(db, shift=duty, shift_date=payload.shift_date, label=label)
+        register_admin_revision(db, locked, user, shift=duty, shift_date=payload.shift_date, label=label)
+        db.commit()
+    except HTTPException:
+        db.rollback()
+        raise
+    except Exception:
+        db.rollback()
+        raise
+    return {
+        "slot": slot_dict(slot),
+        "revision_version": shift_revision_version(db, payload.shift_date, label),
+    }
+
+
+def shift_revision_version(db: Session, shift_date: str, label: str) -> int:
+    record = get_shift_record(db, shift_date, label)
+    return int(record.revision_version or 1) if record is not None else 1
+
+
 @app.get("/api/v1/events")
 def list_events(
     stage: Optional[str] = Query(default=None),
@@ -1762,7 +2367,7 @@ def create_event(payload: EventCreatePayload, user: User = Depends(require_opera
     try:
         shift = get_active_shift(db)
         event = Event(
-            event_no=next_event_no(db, utcnow().year),
+            event_no=next_event_no(db, get_beijing_now().year),
             title=payload.title.strip(),
             device=payload.device.strip(),
             priority=payload.priority,
@@ -1797,7 +2402,7 @@ def transition_event(event_no: str, payload: EventTransitionPayload, user: User 
         operator_name = payload.operator_name or user.real_name
         event.stage = next_stage
         if next_stage == "closed":
-            event.closed_at = utcnow()
+            event.closed_at = get_beijing_now()
         db.add(EventHistory(event_id=event.id, from_stage=STAGES[current_index], to_stage=next_stage, operator_user_id=user.id, operator_name=operator_name, note=note))
         append_log(
             db, None, user, "待办琐事", event.device,
@@ -1882,7 +2487,7 @@ def create_assist_category(
     if duplicate:
         raise HTTPException(status_code=409, detail="该业务分类已存在")
     max_order = db.scalar(select(func.max(SpectrometerAssistCategory.sort_order))) or 0
-    category_id = f"cat_{utcnow().strftime('%Y%m%d%H%M%S%f')}"
+    category_id = f"cat_{get_beijing_now().strftime('%Y%m%d%H%M%S%f')}"
     item = SpectrometerAssistCategory(
         category_id=category_id,
         name=name,
@@ -2111,10 +2716,11 @@ def update_forecast(payload: ForecastPayload, user: User = Depends(require_opera
 
 
 @app.get("/api/v1/shifts/{shift_id}/handover-preview")
-def handover_preview(shift_id: int, _user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+def handover_preview(shift_id: int, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     shift = db.get(DutyShift, shift_id)
     if shift is None:
         raise HTTPException(status_code=404, detail="班次不存在")
+    assert_shift_readable(user, shift)
     alarms = [log_dict(item) for item in db.scalars(select(ShiftLog).where(ShiftLog.shift_id == shift_id, ShiftLog.status != "已闭环").order_by(ShiftLog.occurred_at.desc())).all()]
     # 跨班继承：所有未完成待办都要在本班交接单上列明
     todos = [todo_dict(item) for item in db.scalars(select(ShiftTodo).where(ShiftTodo.is_done.is_(False)).order_by(ShiftTodo.due_at)).all()]
@@ -2149,7 +2755,7 @@ def create_handover(shift_id: int, payload: HandoverPayload, user: User = Depend
         db.add(handover)
         db.flush()
         shift.status = "closed"
-        shift.ended_at = utcnow()
+        shift.ended_at = get_beijing_now()
         append_log(
             db, shift, user, "待办琐事", "运行值班交接",
             f"电子交接班已归档：{shift.leader_name}/{shift.operator_name} → {handover.next_leader_name}；未闭环报警 {len(alarms)} 项，未完成待办 {len(todos)} 项。",
@@ -2222,7 +2828,7 @@ def dashboard_summary(_user: User = Depends(get_current_user), db: Session = Dep
 
 @app.get("/api/v1/bootstrap")
 def bootstrap(_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    shift = get_active_shift(db)
+    shift = operational_current_shift(db)
     forecast = db.scalar(select(BeamForecast).where(BeamForecast.is_active.is_(True)).order_by(BeamForecast.id.desc()))
     events = db.scalars(select(Event).options(selectinload(Event.history)).order_by(Event.created_at.desc())).all()
     nav_items = db.scalars(select(NavItem).where(NavItem.is_active.is_(True)).order_by(NavItem.sort_order, NavItem.id)).all()

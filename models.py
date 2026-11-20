@@ -1,4 +1,4 @@
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from typing import Optional
 
 from sqlalchemy import Boolean, Date, DateTime, Float, ForeignKey, Integer, JSON, String, Text, UniqueConstraint
@@ -7,8 +7,21 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from database import Base
 
 
-def utcnow() -> datetime:
-    return datetime.now(timezone.utc).replace(tzinfo=None)
+# 全局唯一的业务时区：靶站谱仪运行组统一按北京时间（UTC+8）记台账
+CN_TZ = timezone(timedelta(hours=8))
+
+
+def get_beijing_now() -> datetime:
+    """返回不带 tzinfo 但数值严格为东八区（北京时间）的 datetime。
+
+    统一入库口径：SQLite 用 DateTime 存 naive 值，这里直接给出北京时间的
+    naive 数值，读取时无需再做任何时区换算，避免 UTC 与本地时间互相抵消出错。
+    """
+    return datetime.now(CN_TZ).replace(tzinfo=None)
+
+
+def get_beijing_str(fmt: str = "%Y-%m-%d %H:%M") -> str:
+    return datetime.now(CN_TZ).strftime(fmt)
 
 
 class User(Base):
@@ -21,7 +34,7 @@ class User(Base):
     dept: Mapped[str] = mapped_column(String(160), default="", nullable=False)
     role: Mapped[str] = mapped_column(String(20), default="viewer", index=True, nullable=False)
     status: Mapped[str] = mapped_column(String(20), default="pending", index=True, nullable=False)
-    registered_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, nullable=False)
+    registered_at: Mapped[datetime] = mapped_column(DateTime, default=get_beijing_now, nullable=False)
     last_login_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
 
 
@@ -29,7 +42,7 @@ class DutyShift(Base):
     __tablename__ = "duty_shifts"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    shift_date: Mapped[date] = mapped_column(Date, default=lambda: utcnow().date(), index=True, nullable=False)
+    shift_date: Mapped[date] = mapped_column(Date, default=lambda: get_beijing_now().date(), index=True, nullable=False)
     shift_type: Mapped[str] = mapped_column(String(20), default="day", nullable=False)
     planned_start: Mapped[datetime] = mapped_column(DateTime, nullable=False)
     planned_end: Mapped[datetime] = mapped_column(DateTime, nullable=False)
@@ -38,7 +51,7 @@ class DutyShift(Base):
     student_name: Mapped[str] = mapped_column(String(80), default="", nullable=False)
     beam_mode: Mapped[str] = mapped_column(String(40), default="供束打靶", nullable=False)
     status: Mapped[str] = mapped_column(String(20), default="active", index=True, nullable=False)
-    started_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, nullable=False)
+    started_at: Mapped[datetime] = mapped_column(DateTime, default=get_beijing_now, nullable=False)
     ended_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
 
     patrol_slots: Mapped[list["PatrolSlot"]] = relationship(back_populates="shift", cascade="all, delete-orphan")
@@ -53,6 +66,8 @@ class PatrolSlot(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     shift_id: Mapped[int] = mapped_column(ForeignKey("duty_shifts.id", ondelete="CASCADE"), index=True, nullable=False)
+    shift_date: Mapped[Optional[str]] = mapped_column(String(20), index=True, nullable=True)
+    shift_type: Mapped[Optional[str]] = mapped_column(String(10), index=True, nullable=True)
     slot_key: Mapped[str] = mapped_column(String(40), nullable=False)
     planned_at: Mapped[datetime] = mapped_column(DateTime, index=True, nullable=False)
     status: Mapped[str] = mapped_column(String(20), default="pending", index=True, nullable=False)
@@ -97,7 +112,7 @@ class ShiftTodo(Base):
     created_by: Mapped[str] = mapped_column(String(80), default="", nullable=False)
     completed_by: Mapped[Optional[str]] = mapped_column(String(80), nullable=True)
     carried_over: Mapped[bool] = mapped_column(Boolean, default=False, index=True, nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, index=True, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=get_beijing_now, index=True, nullable=False)
 
     shift: Mapped["DutyShift"] = relationship(back_populates="todos")
 
@@ -109,7 +124,7 @@ class ShiftLog(Base):
     shift_id: Mapped[int] = mapped_column(ForeignKey("duty_shifts.id", ondelete="CASCADE"), index=True, nullable=False)
     shift_date: Mapped[Optional[str]] = mapped_column(String(20), index=True, nullable=True)
     shift_type: Mapped[Optional[str]] = mapped_column(String(10), index=True, nullable=True)
-    occurred_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, index=True, nullable=False)
+    occurred_at: Mapped[datetime] = mapped_column(DateTime, default=get_beijing_now, index=True, nullable=False)
     category: Mapped[str] = mapped_column(String(30), index=True, nullable=False)
     target: Mapped[str] = mapped_column(String(160), nullable=False)
     content: Mapped[str] = mapped_column(Text, nullable=False)
@@ -138,7 +153,7 @@ class Event(Base):
     source_type: Mapped[Optional[str]] = mapped_column(String(40), nullable=True)
     source_patrol_slot_id: Mapped[Optional[int]] = mapped_column(ForeignKey("patrol_slots.id", ondelete="SET NULL"), nullable=True)
     created_shift_id: Mapped[Optional[int]] = mapped_column(ForeignKey("duty_shifts.id", ondelete="SET NULL"), nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, index=True, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=get_beijing_now, index=True, nullable=False)
     closed_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
 
     history: Mapped[list["EventHistory"]] = relationship(
@@ -156,7 +171,7 @@ class EventHistory(Base):
     operator_user_id: Mapped[Optional[int]] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     operator_name: Mapped[str] = mapped_column(String(80), nullable=False)
     note: Mapped[str] = mapped_column(Text, default="", nullable=False)
-    acted_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, index=True, nullable=False)
+    acted_at: Mapped[datetime] = mapped_column(DateTime, default=get_beijing_now, index=True, nullable=False)
 
     event: Mapped["Event"] = relationship(back_populates="history")
 
@@ -173,8 +188,8 @@ class NavItem(Base):
     sort_order: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, index=True, nullable=False)
     created_by: Mapped[Optional[int]] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, nullable=False)
-    updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, onupdate=utcnow, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=get_beijing_now, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=get_beijing_now, onupdate=get_beijing_now, nullable=False)
 
 
 class LogTarget(Base):
@@ -184,7 +199,7 @@ class LogTarget(Base):
     name: Mapped[str] = mapped_column(String(160), unique=True, index=True, nullable=False)
     is_system: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     sort_order: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=get_beijing_now, nullable=False)
 
 
 class BeamForecast(Base):
@@ -197,8 +212,8 @@ class BeamForecast(Base):
     note: Mapped[str] = mapped_column(Text, default="", nullable=False)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, index=True, nullable=False)
     created_by: Mapped[Optional[int]] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, nullable=False)
-    updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, onupdate=utcnow, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=get_beijing_now, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=get_beijing_now, onupdate=get_beijing_now, nullable=False)
 
 
 class SopExecution(Base):
@@ -214,7 +229,7 @@ class SopExecution(Base):
     status: Mapped[str] = mapped_column(String(20), default="submitted", index=True, nullable=False)
     progress: Mapped[float] = mapped_column(Float, default=100.0, nullable=False)
     signature_hash: Mapped[str] = mapped_column(String(128), nullable=False)
-    submitted_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, index=True, nullable=False)
+    submitted_at: Mapped[datetime] = mapped_column(DateTime, default=get_beijing_now, index=True, nullable=False)
 
 
 class ShiftHandover(Base):
@@ -228,7 +243,7 @@ class ShiftHandover(Base):
     next_leader_name: Mapped[str] = mapped_column(String(80), nullable=False)
     signed_by_user_id: Mapped[Optional[int]] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     unresolved_snapshot: Mapped[dict] = mapped_column(JSON, default=dict, nullable=False)
-    signed_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, index=True, nullable=False)
+    signed_at: Mapped[datetime] = mapped_column(DateTime, default=get_beijing_now, index=True, nullable=False)
     status: Mapped[str] = mapped_column(String(20), default="archived", index=True, nullable=False)
 
     shift: Mapped["DutyShift"] = relationship(back_populates="handovers")
@@ -244,7 +259,7 @@ class SpectrometerAssistCategory(Base):
     description: Mapped[str] = mapped_column(Text, default="", nullable=False)
     sort_order: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     is_system: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=get_beijing_now, nullable=False)
 
 
 class SpectrometerAssist(Base):
@@ -267,7 +282,7 @@ class SpectrometerAssist(Base):
     op_date: Mapped[str] = mapped_column(String(20), index=True, nullable=False)
     operators: Mapped[str] = mapped_column(String(300), nullable=False)
     notes: Mapped[str] = mapped_column(Text, default="", nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, index=True, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=get_beijing_now, index=True, nullable=False)
 
 
 class EpicsAlarmPV(Base):
@@ -279,4 +294,4 @@ class EpicsAlarmPV(Base):
     pv_name: Mapped[str] = mapped_column(String(150), unique=True, index=True, nullable=False)
     description: Mapped[str] = mapped_column(String(255), index=True, nullable=False)
     oncall_raw: Mapped[str] = mapped_column(Text, default="", nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=get_beijing_now, nullable=False)
